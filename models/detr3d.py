@@ -1,14 +1,14 @@
 from torch import nn
-from models.pointnet_encoder import PointNetEncoder
+from models.pointnet_encoder import RegularizedPointNetEncoder
 from models.image_encoder import ImageEncoder
-from models.fusion_module import MultiModalFusion
+from models.fusion_module import EnhancedMultiModalFusion
 
 class Custom3DETR(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
         
-        self.point_encoder = PointNetEncoder(
+        self.point_encoder = RegularizedPointNetEncoder(
             point_dim=3,
             feat_dim=config['model_params']['point_feat_dim']
         )
@@ -17,7 +17,7 @@ class Custom3DETR(nn.Module):
             feat_dim=config['model_params']['img_feat_dim']
         )
         
-        self.fusion = MultiModalFusion(
+        self.fusion = EnhancedMultiModalFusion(
             point_feat_dim=config['model_params']['point_feat_dim'],
             img_feat_dim=config['model_params']['img_feat_dim'],
             fusion_dim=config['model_params']['fusion_dim']

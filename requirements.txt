@@ -19,6 +19,8 @@ wandb
 
 # For 3D transformations
 scipy
+seaborn
+scikit-learn
 
 # Optional: If you use Jupyter Notebooks for analysis
 # jupyter
