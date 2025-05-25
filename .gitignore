@@ -1,0 +1,25 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual environment
+.venv/
+
+# Model checkpoints
+checkpoints/
+*.pth
+*.pt
+
+# Dataset and large local files
+data/
+
+# Logs and training outputs
+logs/
+*.log
+training_progress.png
+
+# WandB logs
+wandb/
+
+# VS Code settings
+.vscode/
