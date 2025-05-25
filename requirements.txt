@@ -1,0 +1,26 @@
+# Core Libraries
+numpy
+opencv-python
+matplotlib
+scikit-learn
+tqdm
+
+# PyTorch
+torch>=1.12.0
+torchvision>=0.13.0
+torchaudio>=0.12.0
+
+# For image transforms and data augmentation
+Pillow
+
+# For logging
+wandb
+
+# For 3D transformations
+scipy
+
+# Optional: If you use Jupyter Notebooks for analysis
+# jupyter
+
+# If running on GPU (optional - users can install based on their CUDA version)
+# torch==1.12.0+cu113 -f https://download.pytorch.org/whl/torch_stable.html
