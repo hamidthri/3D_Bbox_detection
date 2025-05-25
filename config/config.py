@@ -1,13 +1,13 @@
 import torch
 
 CONFIG = {
-    'data_root': '/content/data/dl_challenge',
+    'data_root': 'data/dl_challenge',
     'max_objects': 21,
     'batch_size': 4,
     'num_epochs': 150,
     'learning_rate': 5e-5,
     'device': 'cuda' if torch.cuda.is_available() else 'cpu',
-    'num_workers': 8,
+    'num_workers': 0,
     'image_size': (480, 608),
     'max_points': 4096,
     'train_split': 0.85,

@@ -1,6 +1,7 @@
 # Core Libraries
 numpy
-opencv-python
+opencv-python-headless
+gdown
 matplotlib
 scikit-learn
 tqdm
