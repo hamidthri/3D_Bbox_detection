@@ -1,174 +1,135 @@
 import torch
-from torch.utils.data import Dataset
+from scipy.spatial.transform import Rotation as R
 import numpy as np
-import cv2
+import matplotlib.pyplot as plt
 import os
-from torchvision import transforms
+import torch.nn.functional as F
+from torch.utils.data import Dataset
+import cv2
+from PIL import Image
+import torchvision.transforms as T
+import random
+from utils.utils import convert_corners_to_params_tensor, BBoxCornerToParametric
 
 
 
-def corners_to_center_size_yaw(corners):
-    """Convert 8x3 corner points to center, size, rotation parameters"""
-    center = np.mean(corners, axis=0)
-    
-    edges = np.array([
-        corners[1] - corners[0],  # width
-        corners[3] - corners[0],  # length  
-        corners[4] - corners[0]   # height
-    ])
-    
-    sizes = np.linalg.norm(edges, axis=1)
-    
-    front_vec = corners[1] - corners[0]
-    front_vec = front_vec / np.linalg.norm(front_vec)
-    yaw = np.arctan2(front_vec[1], front_vec[0])
-    
-    return np.concatenate([center, sizes, [yaw, 0, 0]])
+class AddGaussianNoise:
+    def __init__(self, mean=0., std=0.02):
+        self.mean = mean
+        self.std = std
 
-class EnhancedBBox3DDataset(Dataset):
+    def __call__(self, tensor):
+        return tensor + torch.randn_like(tensor) * self.std
+
+
+class BBox3DDataset(Dataset):
     def __init__(self, folder_paths, config, split='train'):
         self.folder_paths = folder_paths
         self.config = config
         self.split = split
-        self.point_augment = split == 'train'
+        self.converter = BBoxCornerToParametric()
 
-        if split == 'train':
-            self.img_transform = transforms.Compose([
-                transforms.ToPILImage(),
-                transforms.Resize(config['image_size']),
-                transforms.RandomHorizontalFlip(p=0.3),
-                transforms.RandomRotation(degrees=5),
-                transforms.ColorJitter(brightness=0.15, contrast=0.15, saturation=0.15, hue=0.05),
-                transforms.RandomCrop(config['image_size']),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                   std=[0.229, 0.224, 0.225])
-            ])
-        else:
-            self.img_transform = transforms.Compose([
-                transforms.ToPILImage(),
-                transforms.Resize(config['image_size']),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-            ])
+        self.augment = split == 'train'
 
-    def normalize_bbox_params(self, bbox_params):
-        """Normalize bbox parameters for better training stability"""
-        if len(bbox_params) == 0:
-            return bbox_params
-        
-        bbox_params[:, :3] = bbox_params[:, :3] / 5.0  # Normalize positions
-        bbox_params[:, 3:6] = bbox_params[:, 3:6] / 2.0  # Normalize sizes
-        bbox_params[:, 6:] = bbox_params[:, 6:] / np.pi  # Normalize rotations
-        return bbox_params
+        # Augmentations that don't alter object positions
+        self.safe_img_aug = T.Compose([
+            T.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3),
+            T.RandomGrayscale(p=0.1),
+            T.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0)),
+        ])
 
-    def augment_pointcloud(self, pc):
-        """Enhanced point cloud augmentation"""
-        if not self.point_augment:
-            return pc
-
-        noise = np.random.normal(0, self.config['augmentation']['point_noise_std'], pc.shape)
-        pc = pc + noise
-
-        dropout_ratio = self.config['augmentation']['point_dropout_ratio']
-        keep_mask = np.random.random(len(pc)) > dropout_ratio
-        if keep_mask.sum() > self.config['max_points'] // 2:
-            pc = pc[keep_mask]
-
-        return pc
+        # Final image pipeline
+        self.img_transform = T.Compose([
+            T.Resize(config['image_size']),
+            T.ToTensor(),
+            AddGaussianNoise(std=0.02),  # optional noise
+            T.Normalize(mean=[0.485, 0.456, 0.406],
+                        std=[0.229, 0.224, 0.225])
+        ])
 
     def __len__(self):
         return len(self.folder_paths)
 
     def __getitem__(self, idx):
         folder_path = self.folder_paths[idx]
-
         try:
             rgb = cv2.imread(os.path.join(folder_path, 'rgb.jpg'))
             rgb = cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB)
 
             bbox3d = np.load(os.path.join(folder_path, 'bbox3d.npy'))
             pc = np.load(os.path.join(folder_path, 'pc.npy'))
-            
-            try:
-                mask = np.load(os.path.join(folder_path, 'mask.npy'))
-            except:
-                mask = np.array([])
+            mask = np.load(os.path.join(folder_path, 'mask.npy'))
 
             pc = np.transpose(pc, (1, 2, 0)).reshape(-1, 3)
-            valid = ~np.isnan(pc).any(axis=1) & (pc[:, 2] > 0) & (pc[:, 2] < 10)
+            valid = ~np.isnan(pc).any(axis=1) & (pc[:, 2] > 0)
             pc = pc[valid]
-
-            pc_mean = np.mean(pc, axis=0)
-            pc_std = np.std(pc, axis=0) + 1e-8
-            pc = (pc - pc_mean) / pc_std
-
-            pc = self.augment_pointcloud(pc)
 
             if len(pc) > self.config['max_points']:
                 indices = np.random.choice(len(pc), self.config['max_points'], replace=False)
                 pc = pc[indices]
             elif len(pc) < self.config['max_points']:
-                if len(pc) > 0:
-                    repeat_factor = self.config['max_points'] // len(pc) + 1
-                    pc = np.tile(pc, (repeat_factor, 1))[:self.config['max_points']]
-                else:
-                    pc = np.zeros((self.config['max_points'], 3))
+                pad = np.zeros((self.config['max_points'] - len(pc), 3))
+                pc = np.vstack([pc, pad])
 
-            valid_bbox_mask = ~(bbox3d == 0).all(axis=(1, 2))
-            valid_bboxes = bbox3d[valid_bbox_mask]
+            bbox_corners = torch.from_numpy(bbox3d).float()
 
-            if len(valid_bboxes) > 0:
-                bbox_params = np.array([corners_to_center_size_yaw(b) for b in valid_bboxes])
-                bbox_params = self.normalize_bbox_params(bbox_params)
-            else:
-                bbox_params = np.zeros((0, 9))
+            params = convert_corners_to_params_tensor(bbox_corners.unsqueeze(0), self.converter)
+            centers = params['center'].squeeze(0)
+            sizes = params['size'].squeeze(0)
+            rotation_quats = params['rotation_quat'].squeeze(0)
+
+            bbox_params = torch.cat([centers, sizes, rotation_quats], dim=-1)
 
             max_objects = self.config['max_objects']
-            num_objects = len(bbox_params)
+            num_objects = bbox_params.shape[0]
 
             if num_objects < max_objects:
                 pad = max_objects - num_objects
-                bbox_params = np.pad(bbox_params, ((0, pad), (0, 0)), mode='constant')
-                confidence_target = np.zeros(max_objects)
-                confidence_target[:num_objects] = 1.0
-            else:
+                bbox_params = F.pad(bbox_params, (0, 0, 0, pad), value=0)
+                bbox_corners = F.pad(bbox_corners, (0, 0, 0, 0, 0, pad), value=0)
+                mask = np.concatenate([mask, np.zeros((pad, *mask.shape[1:]), dtype=np.float32)], axis=0)
+            elif num_objects > max_objects:
                 bbox_params = bbox_params[:max_objects]
-                num_objects = max_objects
-                confidence_target = np.ones(max_objects)
-
-            out_H, out_W = self.config['image_size']
-            if len(mask) > 0 and len(mask) > max_objects:
+                bbox_corners = bbox_corners[:max_objects]
                 mask = mask[:max_objects]
+                num_objects = max_objects
 
+            # Resize masks
+            out_H, out_W = self.config['image_size']
             resized_masks = []
-            if len(mask) > 0:
-                for k in range(min(len(mask), max_objects)):
-                    m = mask[k].astype(np.float32)
-                    m = cv2.resize(m, (out_W, out_H), interpolation=cv2.INTER_NEAREST)
-                    resized_masks.append(m)
+            for k in range(mask.shape[0]):
+                m = mask[k].astype(np.float32)
+                m = cv2.resize(m, (out_W, out_H), interpolation=cv2.INTER_NEAREST)
+                resized_masks.append(m)
+            mask = np.stack(resized_masks, axis=0)
 
-            while len(resized_masks) < max_objects:
-                resized_masks.append(np.zeros((out_H, out_W), dtype=np.float32))
-
-            mask = np.stack(resized_masks[:max_objects], axis=0)
-
+            # Augment + transform image
+            rgb = Image.fromarray(rgb)
+            if self.augment:
+                rgb = self.safe_img_aug(rgb)
             rgb = self.img_transform(rgb)
+
+            # Convert pc and mask to tensors
             pc = torch.from_numpy(pc).float()
-            bbox_params = torch.from_numpy(bbox_params).float()
             mask = torch.from_numpy(mask).float()
-            confidence_target = torch.from_numpy(confidence_target).float()
-            num_objects = torch.tensor(min(num_objects, max_objects), dtype=torch.long)
+            num_objects = torch.tensor(num_objects, dtype=torch.long)
 
             return {
                 'rgb': rgb,
                 'pointcloud': pc,
                 'bbox_params': bbox_params,
+                'bbox_corners': bbox_corners,
                 'mask': mask,
-                'confidence_target': confidence_target,
                 'num_objects': num_objects
             }
 
         except Exception as e:
             print(f"[ERROR] Failed to load {folder_path}: {e}")
-            return self.get_dummy_sample()
+            return {
+                'rgb': torch.zeros(3, *self.config['image_size']),
+                'pointcloud': torch.zeros(self.config['max_points'], 3),
+                'bbox_params': torch.zeros(self.config['max_objects'], 10),
+                'bbox_corners': torch.zeros(self.config['max_objects'], 8, 3),
+                'mask': torch.zeros(self.config['max_objects'], *self.config['image_size']),
+                'num_objects': torch.tensor(0, dtype=torch.long)
+            }

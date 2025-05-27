@@ -2,52 +2,64 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
-class RegularizedPointNetEncoder(nn.Module):
-    def __init__(self, point_dim=3, feat_dim=32, dropout_rate=0.5):
+class PointNetPPFeatureExtractor(nn.Module):
+    def __init__(self, input_dim=3, k=20, output_dim=256):
         super().__init__()
-        
-        # Smaller network with more regularization
-        self.conv1 = nn.Conv1d(point_dim, 16, 1)  # Reduced from 32
-        self.conv2 = nn.Conv1d(16, 32, 1)         # Reduced from 64
-        self.conv3 = nn.Conv1d(32, feat_dim, 1)   # Keep final dim
-        
-        # Use LayerNorm instead of BatchNorm for better small batch performance
-        self.ln1 = nn.LayerNorm(16)
-        self.ln2 = nn.LayerNorm(32)
-        self.ln3 = nn.LayerNorm(feat_dim)
-        
-        self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(dropout_rate)
-        
-        # Add spatial dropout for point clouds
-        self.spatial_dropout = nn.Dropout2d(0.1)
+        self.k = k
+        self.mlp1 = nn.Sequential(
+            nn.Conv2d(2 * input_dim, 64, 1),
+            nn.BatchNorm2d(64),
+            nn.ReLU()
+        )
+        self.mlp2 = nn.Sequential(
+            nn.Conv2d(64, 128, 1),
+            nn.BatchNorm2d(128),
+            nn.ReLU()
+        )
+        self.mlp3 = nn.Sequential(
+            nn.Conv2d(128, 256, 1),
+            nn.BatchNorm2d(256),
+            nn.ReLU()
+        )
+        self.proj = nn.Sequential(
+            nn.Conv1d(256, output_dim, 1),
+            nn.BatchNorm1d(output_dim),
+            nn.ReLU()
+        )
+
+    def knn(self, x, k):
+        B, C, N = x.size()
+        x = x.transpose(2, 1)  # (B, N, C)
+        inner = -2 * torch.matmul(x, x.transpose(2, 1))
+        xx = torch.sum(x ** 2, dim=2, keepdim=True)
+        pairwise_distance = -xx - inner - xx.transpose(2, 1)
+        idx = pairwise_distance.topk(k=k, dim=-1)[1]
+        return idx
+
+    def get_graph_feature(self, x, k):
+        B, C, N = x.size()
+        idx = self.knn(x, k)
+        device = x.device
+        idx_base = torch.arange(0, B, device=device).view(-1, 1, 1) * N
+        idx = idx + idx_base
+        idx = idx.view(-1)
+
+        x = x.transpose(2, 1).contiguous()
+        feature = x.view(B * N, -1)[idx, :]
+        feature = feature.view(B, N, k, C)
+        x = x.view(B, N, 1, C).repeat(1, 1, k, 1)
+
+        feature = torch.cat((feature - x, x), dim=3).permute(0, 3, 1, 2)
+        return feature
 
     def forward(self, x):
-        # x shape: [B, N, 3]
-        batch_size = x.size(0)
-        x = x.transpose(2, 1)  # [B, 3, N]
-        
-        # Apply spatial dropout to input points
-        if self.training:
-            x = self.spatial_dropout(x.unsqueeze(-1)).squeeze(-1)
-        
-        x = self.conv1(x)  # [B, 16, N]
-        x = x.transpose(2, 1)  # [B, N, 16] for LayerNorm
-        x = self.dropout(self.relu(self.ln1(x)))
-        x = x.transpose(2, 1)  # Back to [B, 16, N]
-        
-        x = self.conv2(x)  # [B, 32, N]
-        x = x.transpose(2, 1)  # [B, N, 32]
-        x = self.dropout(self.relu(self.ln2(x)))
-        x = x.transpose(2, 1)  # Back to [B, 32, N]
-        
-        x = self.conv3(x)  # [B, feat_dim, N]
-        x = x.transpose(2, 1)  # [B, N, feat_dim]
-        x = self.relu(self.ln3(x))
-        x = x.transpose(2, 1)  # Back to [B, feat_dim, N]
-        
-        # Global max pooling with some regularization
-        x = torch.max(x, 2)[0]  # [B, feat_dim]
-        
+        # x: (B, N, 3)
+        x = x.transpose(2, 1)  # (B, 3, N)
+        feat = self.get_graph_feature(x, k=self.k)
+        x = self.mlp1(feat)
+        x = self.mlp2(x)
+        x = self.mlp3(x)
+        x = torch.max(x, dim=-1)[0]  # (B, 256, N)
+        x = self.proj(x)
+        x = torch.max(x, dim=-1)[0]  # (B, output_dim)
         return x
