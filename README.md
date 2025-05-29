@@ -114,7 +114,7 @@ This architecture leverages the strengths of EfficientNet-B3 for image processin
 To address the correspondence problem, I implemented a Hungarian matching algorithm that optimally assigns predicted bounding boxes to ground truth targets based on a composite cost function:
 
 ```python
-cost = w_center * center_distance + w_size * size_distance + w_rot * rotation_distance
+cost = center_distance + size_distance + rotation_distance
 ```
 
 This matching strategy ensures that each ground truth object is assigned to exactly one prediction, eliminating ambiguity in loss computation and preventing the model from converging to degenerate solutions.
@@ -125,61 +125,45 @@ The final loss function addresses four critical aspects of 3D object detection:
 
 #### 1. **Center Regression Loss** (L1)
 ```python
-center_loss = F.l1_loss(predicted_centers, ground_truth_centers)
+center_loss = F.l1_loss(predicted_centers, matched_gt_centers)
 ```
-- **Rationale**: L1 loss provides robust gradients for spatial localization
-- **Benefit**: Less sensitive to outliers compared to L2, crucial for limited training data
 
-#### 2. **Size Regression Loss** (L1)
+#### 2. **Size Regression Loss** (L1)  
 ```python
-size_loss = F.l1_loss(predicted_sizes, ground_truth_sizes)
+size_loss = F.l1_loss(predicted_sizes, matched_gt_sizes)
 ```
-- **Challenge**: Objects vary significantly in scale (small screws vs. large components)
-- **Solution**: L1 loss handles scale variations better than MSE
 
 #### 3. **Rotation Loss** (Quaternion Cosine Distance)
 ```python
-rotation_loss = 1.0 - torch.abs((pred_quat * gt_quat).sum(dim=-1))
+quat_similarity = torch.abs((pred_quat * gt_quat).sum(dim=-1))
+rotation_loss = (1.0 - quat_similarity).mean()
 ```
-- **Challenge**: Quaternion space has unique properties (double-cover, normalization requirements)
-- **Solution**: Cosine distance respects quaternion geometry and handles the double-cover problem
-- **Alternative considered**: Geodesic distance was too computationally expensive for training
 
-#### 4. **Confidence Loss** (Focal Loss Variant)
+#### 4. **Confidence Loss** (Weighted Binary Cross-Entropy)
 ```python
-# Weighted BCE to handle class imbalance
 conf_loss = alpha * positive_loss + (1-alpha) * negative_loss
 ```
-- **Challenge**: Severe class imbalance (most predictions should be "no object")
-- **Solution**: Up-weighting positive samples (α=0.75) to prevent model collapse to "predict nothing"
 
 ### Loss Balancing Strategy
 
-Each loss component operates on different scales and units:
-- Center/Size losses: Euclidean distances (meters)
-- Rotation loss: Angular similarity [0,1]
-- Confidence loss: Probability space [0,1]
+Each loss component operates on different scales and units. The weighting strategy balances optimization across all components:
 
-**Weighting strategy**:
 ```python
 total_loss = w_center * center_loss + w_size * size_loss + 
              w_rot * rotation_loss + w_conf * confidence_loss
 ```
 
-Initial weights were set to unity, then adjusted during training based on gradient magnitudes to ensure balanced optimization across all components.
-
 ### Key Design Decisions
 
-1. **Why Hungarian Matching?**: Alternative approaches like nearest-neighbor assignment led to unstable training due to inconsistent correspondences between epochs.
+1. **Hungarian Matching**: Ensures optimal assignment between predictions and ground truth, preventing training instability from inconsistent correspondences.
 
-2. **Why L1 over L2?**: With limited data, L2 loss amplified the impact of outliers, causing training instability. L1 provided more robust gradients.
+2. **L1 Loss for Regression**: Provides robust gradients for spatial localization, less sensitive to outliers compared to L2 loss.
 
-3. **Why Custom Rotation Loss?**: Standard geodesic distance on SO(3) was computationally prohibitive. The cosine distance approximation provided 90% of the benefit at 10% of the computational cost.
+3. **Quaternion Cosine Distance**: Respects quaternion geometry while being computationally efficient compared to geodesic distance.
 
-4. **Why Confidence Reweighting?**: Initial experiments without reweighting led to models that predicted zero objects for all scenes - the "lazy" solution to minimize false positives.
+4. **Confidence Reweighting**: Up-weights positive samples (α=0.75) to prevent model collapse to predicting zero objects.
 
-Carefully designed loss function is essential for achieving stable training on limited dataset while maintaining detection accuracy across varying object scales and orientations.
-
+The carefully designed loss function achieves stable training on limited datasets while maintaining detection accuracy across varying object scales and orientations.
 
 ## Installation and Usage
 
