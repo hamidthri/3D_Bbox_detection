@@ -7,9 +7,12 @@ This project tackles 3D object detection using multimodal RGB-D data consisting 
 1. **Training a custom architecture from scratch**, allowing full control over design and optimization.
 2. **Fine-tuning a state-of-the-art pre-trained model** to benefit from transfer learning and better generalization.
 
-👉 **Interactive Overview**: [📊 3D Pipeline Visualization](https://hamidthri.github.io/3D_Bbox_detection/3d_pipeline_visualization.html)
+👉 **Interactive Overview**: [📊 3D Pipeline Visualization (Rendered)](https://hamidthri.github.io/3D_Bbox_detection/3d_pipeline_visualization.html)
 
-For an end-to-end overview of the implemented pipeline — including architecture diagrams, data flow, model training, and evaluation strategies — see the detailed [HTML Technical Report](https://hamidthri.github.io/3D_Bbox_detection/pipeline_overview.html).
+📄 **Full Technical Report**: [📘 pipeline_overview.html](https://hamidthri.github.io/3D_Bbox_detection/pipeline_overview.html)
+
+These resources provide visual and written explanations of the architecture, data flow, and design rationale.
+
 
 
 ### Approach 1: Custom Training from Scratch
