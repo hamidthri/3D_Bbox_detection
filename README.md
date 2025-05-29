@@ -249,20 +249,49 @@ These visualizations and metrics provide an in-depth understanding of the model'
 
 
 
-## Key Challenges and Solutions
+## Key Technical Insights
 
-1. **Limited Dataset Size**: With only 200 samples, preventing overfitting was paramount. Solutions included aggressive dropout, careful augmentation, and pre-trained feature extractors.
+### What Worked Well
+- DGCNN effectively captured local geometric relationships in point clouds
+- Transformer-based multimodal fusion provided stable training convergence  
+- Parametric bounding box representation simplified the regression task
 
-2. **Multimodal Registration**: Ensuring RGB and point cloud features remain aligned after preprocessing required careful coordinate system management.
 
-3. **Parametric Conversion Stability**: Developing robust algorithms for corner-to-parametric conversion that handle degenerate cases and maintain differentiability.
+### Critical Challenges Identified
+- **Small Dataset Limitation**: 200 samples insufficient for complex 3D detection without strong priors
+- **3D IoU Optimization**: Standard regression losses don't directly optimize spatial overlap
+- **Scale Sensitivity**: Object size prediction proved more challenging than center localization
+- **Multimodal Alignment**: Ensuring RGB-depth correspondence requires careful preprocessing
+- **Training Stability**: Complex architecture required careful initialization and regularization
 
-4. **Memory Constraints**: Efficiently processing high-resolution RGB images alongside dense point clouds within GPU memory limits.
-
-The small dataset size ultimately made training from scratch particularly challenging, reinforcing the value of transfer learning approaches for limited-data scenarios in 3D computer vision tasks.
+### Technical Decisions & Trade-offs
+- Chose DGCNN over PointNet++ for better local feature extraction at similar computational cost
+- Selected parametric vs. corner representation to reduce prediction complexity (10 vs 24 parameters)
 
 ## Approach 2: Pre-trained Model Fine-tuning
 
 As an alternative to training a custom model from scratch, I explored fine-tuning the state-of-the-art UniDet3D framework ([https://github.com/filapro/unidet3d](https://github.com/filapro/unidet3d)), which leverages the Superpoint Transformer ([https://github.com/drprojects/superpoint_transformer](https://github.com/drprojects/superpoint_transformer)) for preprocessing. This approach promised faster convergence and better generalization due to pre-trained weights, which are particularly beneficial for small datasets like ours (200 samples). However, it required significant preprocessing overhead and dependency management, as the Superpoint Transformer involves complex data transformations to align RGB and point cloud data.
 
 I successfully set up the UniDet3D framework, including configuring the preprocessing pipeline and integrating it with my dataset structure. However, due to time constraints, I was unable to fully fine-tune the model on my specific dataset. The setup included adapting the data loading to handle our RGB images, point clouds, and bounding box annotations, but further optimization (e.g., hyperparameter tuning, adjusting learning rates) was not completed. This approach remains promising for future work, as the pre-trained weights could potentially outperform the custom model with proper fine-tuning.
+
+
+## Requirements Compliance
+
+✅ **Framework**: PyTorch with supporting libraries
+✅ **End-to-end Pipeline**: Complete preprocessing → training → evaluation → visualization  
+✅ **Documentation**: Architecture diagrams, loss function rationale, code structure  
+✅ **Custom Metrics**: Translation, rotation, size errors + 3D IoU  
+✅ **Parameter Limit**: ~15M parameters (well under 100M limit)  
+✅ **Transformer Usage**: Multi-head attention for RGB-point cloud fusion  
+✅ **Training Logs**: Complete loss curves and evaluation metrics  
+✅ **Visualization**: 3D bounding box predictions with ground truth comparison  
+✅ **Pretrained Models**: EfficientNet-B3 backbone with ImageNet initialization  
+
+🔄 **Optional Enhancements**: ONNX conversion and inference optimization identified for future work
+
+---
+
+# Conclusion
+This project demonstrates a comprehensive approach to 3D object detection on RGB-D data, showcasing both the technical challenges and potential solutions in multimodal deep learning. While the custom model achieved moderate performance, the experience highlighted the critical importance of sufficient training data and appropriate transfer learning strategies for complex 3D vision tasks.
+The implementation successfully integrates multiple state-of-the-art components (DGCNN, EfficientNet, Transformer attention) into a cohesive architecture, providing a solid foundation for future improvements. The honest assessment of results and detailed analysis of failure modes provides valuable insights for the computer vision community working on similar challenging problems.
+Key Takeaway: Small dataset 3D object detection remains a significant challenge that benefits greatly from pre-trained models and sophisticated data augmentation strategies. The technical framework developed here provides a strong starting point for future research in this domain.
