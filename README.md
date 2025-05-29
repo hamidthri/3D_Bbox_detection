@@ -190,14 +190,10 @@ pip install -r requirements.txt
 
 ### Data Setup
 ```bash
-# Download dataset
-wget --no-check-certificate 'https://drive.google.com/uc?export=download&id=11s-GLb6LZ0SCAVW6aikqImuuQEEbT_Fb' -O dataset.tar
-
-# Extract data
+gdown --id 11s-GLb6LZ0SCAVW6aikqImuuQEEbT_Fb -O dataset.tar
 mkdir -p data
 tar -xf dataset.tar -C data/
 
-# Verify data structure
 ls data/dl_challenge/
 ```
 
