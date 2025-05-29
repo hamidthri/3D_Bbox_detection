@@ -1,130 +1,91 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from scipy.optimize import linear_sum_assignment
-import numpy as np
 
 class BBox3DLoss(nn.Module):
-    def __init__(self, w_center=1.0, w_size=1.0, w_rot=1.0, w_conf=1.0, conf_alpha=0.75):
+    def __init__(self):
         super().__init__()
-        self.w_center = w_center
-        self.w_size = w_size
-        self.w_rot = w_rot
-        self.w_conf = w_conf
-        self.conf_alpha = conf_alpha
+        self.focal_alpha = 0.25
+        self.focal_gamma = 2.0
 
-    def hungarian_matching(self, pred_bbox, gt_bbox, gt_conf):
-        batch_size = pred_bbox.shape[0]
-        assignments = []
+    """
+        This loss function computes the total loss for 3D bounding box detection, including:
+        - Center loss: Smooth L1 loss for the center of the bounding box.
+        - Size loss: Smooth L1 loss for the size of the bounding box.
+        - Rotation loss: Angle difference between predicted and ground truth quaternion representations.
+        - Confidence loss: Focal loss for the confidence score of the bounding box.
+        Args:
+            pred_bbox (torch.Tensor): Predicted bounding box parameters of shape (B, N, 10) where N is the number of boxes.
+            pred_conf (torch.Tensor): Predicted confidence scores of shape (B, N).
+            gt_bbox (torch.Tensor): Ground truth bounding box parameters of shape (B, N, 10).
+            gt_conf (torch.Tensor): Ground truth confidence scores of shape (B, N).
+        Returns:
+            dict: A dictionary containing the total loss and individual component losses:
+                - 'total_loss': Total loss value.
+                - 'bbox_loss': Combined loss for center, size, and rotation.
+                - 'center_loss': Loss for the center of the bounding box.
+                - 'size_loss': Loss for the size of the bounding box.
+                - 'rotation_loss': Loss for the rotation of the bounding box.
+                - 'conf_loss': Confidence loss.
+    """
         
-        for b in range(batch_size):
-            valid_gt = gt_conf[b] > 0.5
-            num_valid_gt = valid_gt.sum().item()
-            
-            if num_valid_gt == 0:
-                assignments.append(([], []))
-                continue
-                
-            pred_centers = pred_bbox[b, :, :3]
-            pred_sizes = pred_bbox[b, :, 3:6]
-            pred_quats = pred_bbox[b, :, 6:10]
-            
-            gt_centers = gt_bbox[b, valid_gt, :3]
-            gt_sizes = gt_bbox[b, valid_gt, 3:6]
-            gt_quats = gt_bbox[b, valid_gt, 6:10]
-            
-            center_dist = torch.cdist(pred_centers, gt_centers, p=1)
-            size_dist = torch.cdist(pred_sizes, gt_sizes, p=1)
-            
-            pred_quats_norm = F.normalize(pred_quats, dim=-1)
-            gt_quats_norm = F.normalize(gt_quats, dim=-1)
-            rot_sim = torch.abs(torch.mm(pred_quats_norm, gt_quats_norm.T))
-            rot_dist = 1.0 - rot_sim
-            
-            cost_matrix = center_dist + size_dist + rot_dist
-            cost_np = cost_matrix.detach().cpu().numpy()
-            
-            pred_indices, gt_indices = linear_sum_assignment(cost_np)
-            assignments.append((pred_indices, gt_indices))
-            
-        return assignments
-
+    def focal_loss(self, pred, target):
+        ce_loss = F.binary_cross_entropy(pred, target, reduction='none')
+        p_t = pred * target + (1 - pred) * (1 - target)
+        alpha_t = self.focal_alpha * target + (1 - self.focal_alpha) * (1 - target)
+        focal_weight = alpha_t * (1 - p_t) ** self.focal_gamma
+        return (focal_weight * ce_loss).mean()
+    
+    def rotation_loss(self, pred_quat, gt_quat):
+        pred_quat = F.normalize(pred_quat, dim=-1)
+        gt_quat = F.normalize(gt_quat, dim=-1)
+        
+        cos_sim = torch.abs((pred_quat * gt_quat).sum(dim=-1))
+        cos_sim = torch.clamp(cos_sim, 0, 1)
+        angle_diff = torch.acos(cos_sim)
+        return angle_diff.mean()
+    
     def forward(self, pred_bbox, pred_conf, gt_bbox, gt_conf):
-        batch_size = pred_bbox.shape[0]
-        device = pred_bbox.device
+        valid_mask = gt_conf > 0.5
         
-        assignments = self.hungarian_matching(pred_bbox, gt_bbox, gt_conf)
+        if valid_mask.sum() == 0:
+            conf_loss = self.focal_loss(pred_conf, torch.zeros_like(pred_conf))
+            return {
+                'total_loss': conf_loss,
+                'bbox_loss': torch.tensor(0.0, device=pred_bbox.device),
+                'center_loss': torch.tensor(0.0, device=pred_bbox.device),
+                'size_loss': torch.tensor(0.0, device=pred_bbox.device),
+                'rotation_loss': torch.tensor(0.0, device=pred_bbox.device),
+                'conf_loss': conf_loss
+            }
         
-        center_losses = []
-        size_losses = []
-        rot_losses = []
-        conf_losses = []
+        pred_centers = pred_bbox[..., :3]
+        pred_sizes = pred_bbox[..., 3:6]
+        pred_quats = pred_bbox[..., 6:10]
         
-        for b in range(batch_size):
-            pred_indices, gt_indices = assignments[b]
-            
-            if len(pred_indices) == 0:
-                center_losses.append(torch.tensor(0.0, device=device))
-                size_losses.append(torch.tensor(0.0, device=device))
-                rot_losses.append(torch.tensor(0.0, device=device))
-            else:
-                valid_gt_mask = gt_conf[b] > 0.5
-                valid_gt_indices = torch.where(valid_gt_mask)[0]
-                matched_gt_indices = valid_gt_indices[gt_indices]
-                
-                pred_centers = pred_bbox[b, pred_indices, :3]
-                pred_sizes = pred_bbox[b, pred_indices, 3:6]
-                pred_quats = F.normalize(pred_bbox[b, pred_indices, 6:10], dim=-1)
-                
-                gt_centers = gt_bbox[b, matched_gt_indices, :3]
-                gt_sizes = gt_bbox[b, matched_gt_indices, 3:6]
-                gt_quats = F.normalize(gt_bbox[b, matched_gt_indices, 6:10], dim=-1)
-                
-                center_loss = F.l1_loss(pred_centers, gt_centers)
-                size_loss = F.l1_loss(pred_sizes, gt_sizes)
-                
-                quat_similarity = torch.abs((pred_quats * gt_quats).sum(dim=-1))
-                rot_loss = (1.0 - quat_similarity).mean()
-                
-                center_losses.append(center_loss)
-                size_losses.append(size_loss)
-                rot_losses.append(rot_loss)
-            
-            target_conf = torch.zeros_like(pred_conf[b])
-            if len(pred_indices) > 0:
-                target_conf[pred_indices] = 1.0
-            
-            pos_mask = target_conf > 0.5
-            neg_mask = target_conf <= 0.5
-            
-            if pos_mask.sum() > 0:
-                pos_loss = F.binary_cross_entropy(pred_conf[b][pos_mask], target_conf[pos_mask])
-            else:
-                pos_loss = torch.tensor(0.0, device=device)
-                
-            if neg_mask.sum() > 0:
-                neg_loss = F.binary_cross_entropy(pred_conf[b][neg_mask], target_conf[neg_mask])
-            else:
-                neg_loss = torch.tensor(0.0, device=device)
-            
-            conf_loss = self.conf_alpha * pos_loss + (1 - self.conf_alpha) * neg_loss
-            conf_losses.append(conf_loss)
+        gt_centers = gt_bbox[..., :3]
+        gt_sizes = gt_bbox[..., 3:6]
+        gt_quats = gt_bbox[..., 6:10]
         
-        final_center_loss = torch.stack(center_losses).mean()
-        final_size_loss = torch.stack(size_losses).mean()
-        final_rot_loss = torch.stack(rot_losses).mean()
-        final_conf_loss = torch.stack(conf_losses).mean()
+        center_loss = F.smooth_l1_loss(pred_centers[valid_mask], gt_centers[valid_mask])
         
-        total_loss = (self.w_center * final_center_loss + 
-                     self.w_size * final_size_loss + 
-                     self.w_rot * final_rot_loss + 
-                     self.w_conf * final_conf_loss)
+        pred_sizes_pos = torch.clamp(pred_sizes[valid_mask], min=0.01)
+        gt_sizes_pos = torch.clamp(gt_sizes[valid_mask], min=0.01)
+        size_loss = F.smooth_l1_loss(torch.log(pred_sizes_pos), torch.log(gt_sizes_pos))
+        
+        rotation_loss = self.rotation_loss(pred_quats[valid_mask], gt_quats[valid_mask])
+        
+        target_conf = valid_mask.float()
+        conf_loss = self.focal_loss(pred_conf, target_conf)
+        
+        bbox_loss = center_loss + size_loss + rotation_loss
+        total_loss = 5.0 * bbox_loss + conf_loss
         
         return {
             'total_loss': total_loss,
-            'bbox_loss': final_center_loss + final_size_loss + final_rot_loss,
-            'center_loss': final_center_loss,
-            'size_loss': final_size_loss,
-            'rotation_loss': final_rot_loss,
-            'conf_loss': final_conf_loss
+            'bbox_loss': bbox_loss,
+            'center_loss': center_loss,
+            'size_loss': size_loss,
+            'rotation_loss': rotation_loss,
+            'conf_loss': conf_loss
         }
