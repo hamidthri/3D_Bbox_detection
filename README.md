@@ -114,7 +114,6 @@ This architecture leverages the strengths of EfficientNet-B3 for image processin
 To address the correspondence problem, I implemented a Hungarian matching algorithm that optimally assigns predicted bounding boxes to ground truth targets based on a composite cost function:
 
 ```python
-# Cost combines geometric similarity across all bbox parameters
 cost = w_center * center_distance + w_size * size_distance + w_rot * rotation_distance
 ```
 
