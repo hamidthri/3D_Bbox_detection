@@ -16,6 +16,7 @@ class TransformerFusion(nn.Module):
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers)
 
     def forward(self, rgb_features, pc_features):
-        fused = torch.stack([rgb_features, pc_features], dim=1)  # (B, 2, D)
-        out = self.transformer(fused)
-        return out.mean(dim=1)
+        features = torch.stack([rgb_features, pc_features], dim=1)  # (B, 2, F)
+        fused = self.transformer(features)  # (B, 2, F)
+        return fused.mean(dim=1)  # (B, F)
+

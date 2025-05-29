@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from models.pointnet_encoder import PointNetPPFeatureExtractor
+from models.pointnet_encoder import DGCNN
 from models.image_encoder import ImageEncoder
 from models.fusion_module import TransformerFusion
 from torchvision.models import efficientnet_b3
@@ -12,12 +12,10 @@ class BBox3DPredictor(nn.Module):
         self.config = config
         self.max_objects = config['max_objects']
 
-        # Image encoder
-        self.rgb_backbone = efficientnet_b3(pretrained=config['model_params']['backbone_pretrained'])
+        # RGB backbone
+        self.rgb_backbone = efficientnet_b3(weights="IMAGENET1K_V1" if config['model_params']['backbone_pretrained'] else None)
         rgb_feature_dim = self.rgb_backbone.classifier[1].in_features
         self.rgb_backbone.classifier = nn.Identity()
-        for param in self.rgb_backbone.parameters():
-            param.requires_grad = False
 
         self.rgb_proj = nn.Sequential(
             nn.Linear(rgb_feature_dim, config['model_params']['fusion_dim']),
@@ -25,34 +23,35 @@ class BBox3DPredictor(nn.Module):
             nn.Dropout(config['model_params']['dropout'])
         )
 
-        # Point cloud feature extractor
-        self.pc_extractor = PointNetPPFeatureExtractor(
+        # Point cloud feature extractor using DGCNN
+        self.pc_extractor = DGCNN(
             input_dim=3,
+            k=config['model_params'].get('dgcnn_k', 20),
             output_dim=config['model_params']['fusion_dim']
         )
 
-        # Fusion
+        # Fusion module
         self.fusion = TransformerFusion(
             feature_dim=config['model_params']['fusion_dim'],
             num_layers=config['model_params']['num_transformer_layers']
         )
 
-        # 3D BBox prediction
+        # Bounding box regression head
         self.bbox_head = nn.Sequential(
             nn.Linear(config['model_params']['fusion_dim'], 512),
             nn.ReLU(),
             nn.Dropout(config['model_params']['dropout']),
             nn.Linear(512, 256),
             nn.ReLU(),
-            nn.Linear(256, self.max_objects * 10)  # (center + size + quat) * max_objects
+            nn.Linear(256, self.max_objects * (6 + 4))  # 6 for center, size, , 4 for rotation quaternion
         )
 
-        # Confidence prediction per object
+        # Confidence score head
         self.confidence_head = nn.Sequential(
             nn.Linear(config['model_params']['fusion_dim'], 256),
             nn.ReLU(),
             nn.Dropout(config['model_params']['dropout']),
-            nn.Linear(256, self.max_objects)  # One confidence score per object
+            nn.Linear(256, self.max_objects)
         )
 
     def forward(self, rgb, pointcloud):
@@ -63,7 +62,7 @@ class BBox3DPredictor(nn.Module):
 
         fused_feat = self.fusion(rgb_feat, pc_feat)
 
-        bbox_pred = self.bbox_head(fused_feat).view(-1, self.max_objects, 10)
+        bbox_pred = self.bbox_head(fused_feat).view(-1, self.max_objects, 6 + 4)
         conf_pred = torch.sigmoid(self.confidence_head(fused_feat))
 
         return bbox_pred, conf_pred
