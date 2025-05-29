@@ -96,7 +96,7 @@ The implemented solution, embodied in the `BBox3DPredictor` class, follows a mul
 
 I implemented **Dynamic Graph CNN (DGCNN)** following the design outlined in the official [DGCNN repository](https://github.com/AnTao97/dgcnn.pytorch). The architecture is summarized below:
 
-![DGCNN Architecture](assets/dgcnn_architecture.png)
+![DGCNN Architecture](assets/dgcnn_architecture.jpg)
 
 
 ### Multimodal Fusion
