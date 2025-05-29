@@ -87,9 +87,17 @@ The implemented solution, embodied in the `BBox3DPredictor` class, follows a mul
   - Normalization using ImageNet statistics (`mean=[0.485, 0.456, 0.406]`, `std=[0.229, 0.224, 0.225]`)
 
 ### Point Cloud Processing
+
 - **Architecture**: DGCNN-based feature extractor with three EdgeConv layers, each using k=20 nearest neighbors to build dynamic graphs.
 - **Processing**: Takes point clouds of 8192 points (3D coordinates) and produces 256-dimensional global features through a series of graph convolutions, batch normalization, and max-pooling.
 - **Output**: A compact 512-dimensional feature vector after a final linear layer, batch normalization, and dropout (0.5).
+
+#### DGCNN Architecture Reference
+
+I implemented **Dynamic Graph CNN (DGCNN)** following the design outlined in the official [DGCNN repository](https://github.com/AnTao97/dgcnn.pytorch). The architecture is summarized below:
+
+![DGCNN Architecture](assets/dgcnn_architecture.png)
+
 
 ### Multimodal Fusion
 - **Method**: Transformer-based attention mechanism to integrate RGB and point cloud features.
