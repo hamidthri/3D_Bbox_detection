@@ -95,7 +95,7 @@ I implemented **Dynamic Graph CNN (DGCNN)** following the design outlined in the
 - **Integration**: Late fusion, where RGB and point cloud features are stacked and processed by the transformer, then averaged to produce a unified 512-dimensional feature vector.
 
 ### Prediction Heads
-- **Bounding Box Head**: Predicts parameters (center, size, quaternion) for up to 21 objects per scene(The maximum nymbers in the datset), outputting a tensor of shape `(batch_size, 21, 10)`.
+- **Bounding Box Head**: Predicts parameters (center, size, quaternion) for up to 21 objects per scene(The maximum number of the object in a scene in the dataset), outputting a tensor of shape `(batch_size, 21, 10)`.
 to predict 10 value for each bounding box 3d.
 - **Confidence Head**: Predicts per-object detection confidence scores, outputting a tensor of shape `(batch_size, 21)` with sigmoid activation for scores between 0 and 1.
 
