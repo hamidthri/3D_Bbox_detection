@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from models.pointnet_encoder import DGCNN
-from models.image_encoder import ImageEncoder
 from models.fusion_module import TransformerFusion
 from torchvision.models import efficientnet_b3
 
