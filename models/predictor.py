@@ -12,7 +12,6 @@ class BBox3DPredictor(nn.Module):
         self.config = config
         self.max_objects = config['max_objects']
 
-        # RGB backbone
         self.rgb_backbone = efficientnet_b3(weights="IMAGENET1K_V1" if config['model_params']['backbone_pretrained'] else None)
         rgb_feature_dim = self.rgb_backbone.classifier[1].in_features
         self.rgb_backbone.classifier = nn.Identity()
@@ -23,27 +22,24 @@ class BBox3DPredictor(nn.Module):
             nn.Dropout(config['model_params']['dropout'])
         )
 
-        # Point cloud feature extractor using DGCNN
         self.pc_extractor = DGCNN(
             input_dim=3,
             k=config['model_params'].get('dgcnn_k', 20),
             output_dim=config['model_params']['fusion_dim']
         )
 
-        # Fusion module
         self.fusion = TransformerFusion(
             feature_dim=config['model_params']['fusion_dim'],
             num_layers=config['model_params']['num_transformer_layers']
         )
 
-        # Bounding box regression head
         self.bbox_head = nn.Sequential(
             nn.Linear(config['model_params']['fusion_dim'], 512),
             nn.ReLU(),
             nn.Dropout(config['model_params']['dropout']),
             nn.Linear(512, 256),
             nn.ReLU(),
-            nn.Linear(256, self.max_objects * (6 + 4))  # 6 for center, size, , 4 for rotation quaternion
+            nn.Linear(256, self.max_objects * (6 + 4))
         )
 
         # Confidence score head

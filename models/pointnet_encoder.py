@@ -2,11 +2,20 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# =============================================================================
-# 1. EDGE CONVOLUTION MODULE (FOR DGCNN)
-# =============================================================================
 
 class EdgeConv(nn.Module):
+    """
+    EdgeConv layer as described in the DGCNN paper.
+    This layer computes local features by considering the k-nearest neighbors of each point.
+    Args:
+        in_channels (int): Number of input channels.
+        out_channels (int): Number of output channels.
+        k (int): Number of nearest neighbors to consider for each point.
+    
+    Attributes:
+        k (int): Number of nearest neighbors.
+        conv (nn.Sequential): Sequential container for convolutional layers.
+    """
     def __init__(self, in_channels, out_channels, k=20):
         super().__init__()
         self.k = k
@@ -18,41 +27,36 @@ class EdgeConv(nn.Module):
 
     def knn(self, x, k):
         B, C, N = x.size()
-        x_t = x.transpose(2, 1)  # (B, N, C)
+        x_t = x.transpose(2, 1)
         inner = -2 * torch.matmul(x_t, x_t.transpose(2, 1))
         xx = torch.sum(x_t ** 2, dim=2, keepdim=True)
         pairwise_distance = -xx - inner - xx.transpose(2, 1)
-        idx = pairwise_distance.topk(k=k, dim=-1)[1]  # (B, N, k)
+        idx = pairwise_distance.topk(k=k, dim=-1)[1]
         return idx
 
     def get_graph_feature(self, x, k, idx=None):
         B, C, N = x.size()
         if idx is None:
-            idx = self.knn(x, k)  # (B, N, k)
+            idx = self.knn(x, k)
 
         device = x.device
         idx_base = torch.arange(0, B, device=device).view(-1, 1, 1) * N
         idx = idx + idx_base
         idx = idx.view(-1)
 
-        x = x.transpose(2, 1).contiguous()  # (B, N, C)
+        x = x.transpose(2, 1).contiguous()
         feature = x.view(B * N, -1)[idx, :]
         feature = feature.view(B, N, k, C)
         x = x.view(B, N, 1, C).repeat(1, 1, k, 1)
 
-        feature = torch.cat((feature - x, x), dim=3).permute(0, 3, 1, 2)  # (B, 2C, N, k)
+        feature = torch.cat((feature - x, x), dim=3).permute(0, 3, 1, 2) 
         return feature
 
     def forward(self, x):
-        x = self.get_graph_feature(x, self.k)  # (B, 2*in_channels, N, k)
-        x = self.conv(x)  # (B, out_channels, N, k)
-        x = x.max(dim=-1)[0]  # (B, out_channels, N)
+        x = self.get_graph_feature(x, self.k)  
+        x = self.conv(x) 
+        x = x.max(dim=-1)[0] 
         return x
-
-
-# =============================================================================
-# 2. DGCNN FEATURE EXTRACTOR
-# =============================================================================
 
 class DGCNN(nn.Module):
     def __init__(self, input_dim=3, k=20, output_dim=256):

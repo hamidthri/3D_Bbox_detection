@@ -19,6 +19,18 @@ class BBox3DDataset(Dataset):
         self.config = config
         self.split = split
         self.converter = BBoxCornerToParametric()
+        """
+            This dataset class handles loading and processing of 3D bounding box data.
+            It expects each folder to contain:
+            - rgb.jpg: RGB image
+            - bbox3d.npy: 3D bounding box corners in shape (N, 8, 3)
+            - pc.npy: Point cloud data in shape (3, H, W)
+            - mask.npy: Masks for each bounding box in shape (N, H, W)
+            Args:
+                folder_paths (list): List of folder paths containing the data.
+                config (dict): Configuration dictionary with parameters like image size, max points, etc.
+                split (str): Dataset split - 'train', 'val', or 'test'.
+        """
 
         # Image transforms
         if split == 'train':

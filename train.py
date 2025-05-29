@@ -1,6 +1,6 @@
 import os
 import numpy as np
-import torch  # ✅ REQUIRED
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
@@ -11,7 +11,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 from config.config import CONFIG
 from datasets.custom_dataset import BBox3DDataset
-from models.detr3d import BBox3DPredictor
+from models.predictor import BBox3DPredictor
 from losses.loss import BBox3DLoss
 import random
 import glob
@@ -26,14 +26,12 @@ def create_data_splits(data_root, config):
     all_folders = [os.path.join(data_root, f) for f in os.listdir(data_root)
                    if os.path.isdir(os.path.join(data_root, f))]
 
-    # First split: train vs (val + test)
     train_folders, temp_folders = train_test_split(
         all_folders,
         test_size=(config['val_split'] + config['test_split']),
         random_state=42
     )
 
-    # Second split: val vs test
     val_folders, test_folders = train_test_split(
         temp_folders,
         test_size=config['test_split'] / (config['val_split'] + config['test_split']),
@@ -47,7 +45,7 @@ def create_data_splits(data_root, config):
 
 def train_one_epoch(model, dataloader, criterion, optimizer, device, epoch, scheduler=None):
     model.train()
-    accumulation_steps = 4  # Effective batch size = batch_size * 4
+    accumulation_steps = 4
     optimizer.zero_grad()
 
     running_stats = {}
@@ -63,7 +61,6 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device, epoch, sche
         loss = loss_dict['total_loss']
 
 
-        # Scale loss by accumulation steps
         loss = loss / accumulation_steps
         loss.backward()
 
@@ -72,11 +69,9 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device, epoch, sche
             optimizer.step()
             optimizer.zero_grad()
 
-        # Update stats
         for k, v in loss_dict.items():
             running_stats[k] = running_stats.get(k, 0.0) + v.item()
 
-    # Handle remaining gradients
     if len(dataloader) % accumulation_steps != 0:
         optimizer.step()
         optimizer.zero_grad()
@@ -114,7 +109,6 @@ def validate_one_epoch(model, dataloader, criterion, device, epoch):
             device=device
         )
 
-        # Visualize first batch sample
         if i == 0:
             b = 0
             pc_np = pc[b].cpu().numpy()
@@ -125,7 +119,6 @@ def validate_one_epoch(model, dataloader, criterion, device, epoch):
             visualize_pc_and_boxes_matplotlib(pc_np, gt_boxes, pred_boxes, path=fig_path)
 
 
-        # Update loss stats
         for k, v in loss_dict.items():
             running_stats[k] = running_stats.get(k, 0.0) + v.item()
 
@@ -156,7 +149,6 @@ def main(config):
     seed_everything()
     device = torch.device(config['device'])
 
-    # 1. Create data splits
     train_folders, val_folders, test_folders = create_data_splits(config['data_root'], config)
     train_dataset = BBox3DDataset(train_folders, config, split='train')
     val_dataset = BBox3DDataset(val_folders, config, split='val')
@@ -166,16 +158,13 @@ def main(config):
     val_loader = DataLoader(val_dataset, batch_size=config['batch_size'],
                             shuffle=False, num_workers=config['num_workers'])
 
-    # 3. Model
     model = BBox3DPredictor(config).to(device)
 
-    # 4. Loss & Optimizer
     criterion = BBox3DLoss()
     train_losses = []
     val_losses = []
     optimizer = torch.optim.AdamW(model.parameters(), lr=config['learning_rate'], weight_decay=1e-4)
 
-    # 6. Load checkpoint
     start_epoch = 1
     best_val_loss = float('inf')
     if config['resume']:
@@ -198,11 +187,9 @@ def main(config):
               f"BBox: {val_stats['bbox_loss']:.4f}, "
               f"Conf: {val_stats['conf_loss']:.4f}")
 
-        # Plot training curves every 10 epochs
         if (epoch + 1) % 10 == 0:
             plt.figure(figsize=(10, 4))
 
-            # Full loss curves
             plt.subplot(1, 2, 1)
             plt.plot(train_losses, label='Train', marker='o')
             plt.plot(val_losses, label='Val', marker='s')
@@ -210,7 +197,6 @@ def main(config):
             plt.legend()
             plt.grid(True)
 
-            # Recent loss curves (last 50 epochs or less)
             plt.subplot(1, 2, 2)
             start = max(0, epoch - 49)
             recent_train = train_losses[start:]
@@ -227,7 +213,6 @@ def main(config):
             plt.savefig(f'training_progress_epoch_{epoch + 1}.png')
             plt.show()
 
-        # Visualization for the first sample of val
         model.eval()
         batch = next(iter(val_loader))
         rgb = batch['rgb'].to(device)
@@ -253,7 +238,6 @@ def main(config):
         print(f"\nEpoch {epoch} Summary:")
         print(f"Train Loss: {train_stats['total_loss']:.4f} | Val Loss: {val_stats['total_loss']:.4f}")
 
-        # Save best model checkpoint
         if val_stats['total_loss'] < best_val_loss:
             best_val_loss = val_stats['total_loss']
             save_checkpoint(model, optimizer, epoch, best_val_loss, path="checkpoints/best_model.pth")

@@ -6,6 +6,13 @@ import torch.nn.functional as F
 class TransformerFusion(nn.Module):
     def __init__(self, feature_dim=256, num_layers=4, num_heads=8):
         super().__init__()
+        """
+        Transformer-based feature fusion module.
+        Args:
+            feature_dim (int): Dimension of the input features.
+            num_layers (int): Number of transformer encoder layers.
+            num_heads (int): Number of attention heads in the transformer.
+        """
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=feature_dim,
             nhead=num_heads,

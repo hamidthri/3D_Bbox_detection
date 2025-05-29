@@ -1,4 +1,4 @@
-from models.detr3d import BBox3DPredictor
+from models.predictor import BBox3DPredictor
 from datasets.custom_dataset import BBox3DDataset
 from utils.evaluator import BBox3DEvaluator, create_evaluation_report
 from utils.visualizer_inf import visualize_3d_predictions
@@ -31,6 +31,9 @@ def create_data_splits(data_root, config):
 
 
 def run_inference():
+    """
+    Run inference on the test dataset and evaluate the model.
+    """
     _, _, test_folders = create_data_splits(CONFIG['data_root'], CONFIG)
     test_dataset = BBox3DDataset(test_folders, CONFIG, split='test')
     test_loader = DataLoader(test_dataset, batch_size=CONFIG['batch_size'], shuffle=False)
@@ -48,7 +51,6 @@ def run_inference():
     for k, v in metrics.items():
         print(f"{k}: {v:.4f}" if isinstance(v, float) else f"{k}: {v}")
 
-    # 🎯 Run inference demo visualizations
     run_inference_demo(model, test_loader, CONFIG['device'], num_samples=5)
 
 
