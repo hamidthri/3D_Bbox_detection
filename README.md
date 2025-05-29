@@ -194,7 +194,7 @@ python inference.py
 
 ## Visualizations and Evaluation Metrics
 
-### 🔍 Prediction Visualizations
+### Prediction Visualizations
 
 The model includes 3D visualization tools to qualitatively assess prediction performance. Using the `inference.py`), the pipeline generates side-by-side visualizations of:
 
@@ -237,7 +237,7 @@ The evaluation results suggest:
 - **Significant issues** with size estimation and 3D box alignment (as indicated by IoU).
 - **High variability** in predictions, suggesting inconsistent model generalization.
 
-#### 🔧 Potential Improvements:
+#### Potential Improvements:
 
 - Incorporate **IoU-based loss** to directly optimize for spatial alignment.
 - Generate **synthetic data** or apply **more aggressive augmentations** to combat overfitting.
