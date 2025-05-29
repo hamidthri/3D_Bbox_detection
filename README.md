@@ -232,7 +232,7 @@ Each output image (e.g., `prediction_demo.html`) displays the predicted and actu
 
 ---
 
-### 📊 Evaluation Metrics
+### Evaluation Metrics
 
 Quantitative evaluation is conducted on the test set. The following metrics are reported:
 
@@ -249,7 +249,7 @@ Quantitative evaluation is conducted on the test set. The following metrics are 
 
 ---
 
-### 📌 Interpretation & Future Improvements
+### Interpretation & Future Improvements
 
 The evaluation results suggest:
 
