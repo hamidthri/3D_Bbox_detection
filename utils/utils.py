@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from torch.utils.data import Dataset
 from torchvision import transforms as T
 from PIL import Image
+import os
 
 class BBoxCornerToParametric:
     def __init__(self, device='cpu'):
@@ -188,70 +189,29 @@ def convert_corners_to_params_tensor(corners, converter):
         'rotation_quat': torch.tensor(np.stack(rotation_quats), dtype=torch.float32, device=corners.device)
     }
 
-def visualize_predictions(rgb, pred_corners, gt_corners, pred_conf, gt_conf, sample_idx=0, conf_threshold=0.5):
-    fig = plt.figure(figsize=(18, 6))
-
-    # RGB Image
-    ax1 = fig.add_subplot(131)
-    img = rgb[sample_idx].cpu().permute(1, 2, 0)
-    img = img * torch.tensor([0.229, 0.224, 0.225]) + torch.tensor([0.485, 0.456, 0.406])
-    img = torch.clamp(img, 0, 1).numpy()
-    ax1.imshow(img)
-    ax1.set_title("RGB Image", fontsize=14)
-    ax1.axis('off')
-
-    # Ground Truth 3D Boxes
-    ax2 = fig.add_subplot(132, projection='3d')
-    ax2.set_title("Ground Truth 3D Boxes", fontsize=14)
-    _setup_3d_axes(ax2)
-
-    gt_valid = gt_conf[sample_idx]
-    if gt_valid.ndim > 1:
-        gt_valid = gt_valid.mean(dim=-1)  # ✅ Reduce to scalar confidence
-    gt_valid = gt_valid > 0.5
-
-    for i in range(gt_valid.shape[0]):
-        if gt_valid[i].item():
-            corners = gt_corners[sample_idx, i].cpu().numpy()
-            draw_3d_box(ax2, corners, color='green', alpha=0.5)
-    ax2.view_init(elev=20, azim=135)
-
-    # Predicted 3D Boxes
-    ax3 = fig.add_subplot(133, projection='3d')
-    ax3.set_title("Predicted 3D Boxes", fontsize=14)
-    _setup_3d_axes(ax3)
-
-    pred_valid = pred_conf[sample_idx]
-    if pred_valid.ndim > 1:
-        pred_valid = pred_valid.mean(dim=-1)  # ✅ Reduce to scalar
-    pred_valid = pred_valid > conf_threshold
-
-    for i in range(pred_valid.shape[0]):
-        if pred_valid[i].item():
-            corners = pred_corners[sample_idx, i].detach().cpu().numpy()
-            draw_3d_box(ax3, corners, color='red', alpha=0.5)
-    ax3.view_init(elev=20, azim=135)
-
-    plt.tight_layout()
-    return fig
+# 
 
 
-def draw_3d_box(ax, corners, color='blue', alpha=0.6):
-    edges = [
-        [0, 1], [1, 2], [2, 3], [3, 0],
-        [4, 5], [5, 6], [6, 7], [7, 4],
-        [0, 4], [1, 5], [2, 6], [3, 7]
-    ]
-    for edge in edges:
-        p1, p2 = corners[edge]
-        ax.plot3D(*zip(p1, p2), color=color, alpha=alpha, linewidth=2.5)
 
-def _setup_3d_axes(ax):
-    ax.set_xlabel("X", fontsize=10)
-    ax.set_ylabel("Y", fontsize=10)
-    ax.set_zlabel("Z", fontsize=10)
-    ax.grid(False)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.set_zticks([])
-    ax.set_box_aspect([1, 1, 1])
+def save_checkpoint(model, optimizer, epoch, best_val_loss, path="checkpoints/checkpoint.pth"):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    torch.save({
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'best_val_loss': best_val_loss
+    }, path)
+    print(f"Saved checkpoint to: {path}")
+
+def load_checkpoint(model, optimizer, path="checkpoints/checkpoint.pth", device='cpu'):
+    if not os.path.exists(path):
+        print(f"No checkpoint found at: {path}")
+        return model, optimizer, 1, float('inf')
+
+    checkpoint = torch.load(path, map_location=device)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    epoch = checkpoint['epoch']
+    best_val_loss = checkpoint['best_val_loss']
+    print(f"Loaded checkpoint from: {path} (epoch {epoch})")
+    return model, optimizer, epoch + 1, best_val_loss

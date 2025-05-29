@@ -3,257 +3,127 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import cv2
 import torch
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
+def visualize_pc_and_boxes_matplotlib(pc, gt_boxes, pred_boxes, path=None):
+    """
+    Plots point cloud with GT (green) and predicted (red) boxes in 3D using matplotlib.
+    pc: (N, 3)
+    gt_boxes, pred_boxes: list of (8, 3) arrays
+    """
+    fig = plt.figure(figsize=(8, 6))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(pc[:, 0], pc[:, 1], pc[:, 2], c='gray', s=0.5, alpha=0.4)
 
-def visualize_3d_predictions(rgb_image, pointcloud, pred_boxes, target_boxes, 
-                           pred_confidences=None, save_path=None):
-    fig = plt.figure(figsize=(20, 8))
-    
-    ax1 = fig.add_subplot(141)
-    if isinstance(rgb_image, torch.Tensor):
-        rgb_np = rgb_image.cpu().permute(1, 2, 0).numpy()
+    def draw_box(corners, color):
+        for start, end in [(0,1),(1,2),(2,3),(3,0),
+                           (4,5),(5,6),(6,7),(7,4),
+                           (0,4),(1,5),(2,6),(3,7)]:
+            xs = [corners[start, 0], corners[end, 0]]
+            ys = [corners[start, 1], corners[end, 1]]
+            zs = [corners[start, 2], corners[end, 2]]
+            ax.plot(xs, ys, zs, c=color, linewidth=1)
+
+    for box in gt_boxes:
+        draw_box(box, 'green')
+    for box in pred_boxes:
+        draw_box(box, 'red')
+
+    ax.set_xlim(pc[:,0].min(), pc[:,0].max())
+    ax.set_ylim(pc[:,1].min(), pc[:,1].max())
+    ax.set_zlim(pc[:,2].min(), pc[:,2].max())
+    ax.set_axis_off()
+    if path:
+        plt.savefig(path, bbox_inches='tight', dpi=150)
+        plt.close(fig)
     else:
-        rgb_np = rgb_image
-    
-    rgb_np = (rgb_np - rgb_np.min()) / (rgb_np.max() - rgb_np.min())
-    ax1.imshow(rgb_np)
-    ax1.set_title('RGB Image')
+        plt.show()
+
+def visualize_predictions(rgb, pred_corners, gt_corners, pred_conf, gt_conf, sample_idx=0, conf_threshold=0.5):
+    """
+    Visualize RGB input, Ground Truth, and Predicted 3D bounding boxes side-by-side.
+
+    Parameters:
+        rgb (Tensor): [B, 3, H, W] image tensor
+        pred_corners (Tensor): [B, N, 8, 3] predicted box corners
+        gt_corners (Tensor): [B, N, 8, 3] ground truth box corners
+        pred_conf (Tensor): [B, N] confidence scores
+        gt_conf (Tensor): [B, N] validity mask (or soft scores)
+        sample_idx (int): which sample in the batch to visualize
+        conf_threshold (float): threshold to filter predicted boxes
+    """
+    fig = plt.figure(figsize=(18, 6))
+
+    # --- RGB Image ---
+    ax1 = fig.add_subplot(131)
+    img = rgb[sample_idx].cpu().permute(1, 2, 0)
+    img = img * torch.tensor([0.229, 0.224, 0.225]) + torch.tensor([0.485, 0.456, 0.406])
+    img = torch.clamp(img, 0, 1).numpy()
+    ax1.imshow(img)
+    ax1.set_title("RGB Image", fontsize=14)
     ax1.axis('off')
-    
-    ax2 = fig.add_subplot(142, projection='3d')
-    if isinstance(pointcloud, torch.Tensor):
-        pc_np = pointcloud.cpu().numpy()
-    else:
-        pc_np = pointcloud
-    
-    ax2.scatter(pc_np[:, 0], pc_np[:, 1], pc_np[:, 2], 
-               c=pc_np[:, 2], s=1, alpha=0.6, cmap='viridis')
-    ax2.set_title('Point Cloud')
-    ax2.set_xlabel('X')
-    ax2.set_ylabel('Y')
-    ax2.set_zlabel('Z')
-    
-    ax3 = fig.add_subplot(143, projection='3d')
-    ax3.scatter(pc_np[:, 0], pc_np[:, 1], pc_np[:, 2], 
-               c='lightgray', s=0.5, alpha=0.3)
-    
-    for i, box in enumerate(target_boxes):
-        draw_3d_bbox(ax3, box, color='green', alpha=0.7, linewidth=2,
-                    label='Ground Truth' if i == 0 else "")
-    
-    ax3.set_title('Ground Truth Boxes')
-    ax3.set_xlabel('X')
-    ax3.set_ylabel('Y')
-    ax3.set_zlabel('Z')
-    if len(target_boxes) > 0:
-        ax3.legend()
-    
-    ax4 = fig.add_subplot(144, projection='3d')
-    ax4.scatter(pc_np[:, 0], pc_np[:, 1], pc_np[:, 2], 
-               c='lightgray', s=0.5, alpha=0.3)
-    
-    for i, box in enumerate(target_boxes):
-        draw_3d_bbox(ax4, box, color='green', alpha=0.5, linewidth=1,
-                    label='Ground Truth' if i == 0 else "")
-    
-    for i, box in enumerate(pred_boxes):
-        conf_text = f" (conf: {pred_confidences[i]:.2f})" if pred_confidences is not None else ""
-        draw_3d_bbox(ax4, box, color='red', alpha=0.8, linewidth=2,
-                    label=f'Prediction{conf_text}' if i == 0 else "")
-    
-    ax4.set_title('Predictions vs Ground Truth')
-    ax4.set_xlabel('X')
-    ax4.set_ylabel('Y')
-    ax4.set_zlabel('Z')
-    if len(pred_boxes) > 0 or len(target_boxes) > 0:
-        ax4.legend()
-    
+
+    # --- Ground Truth Boxes ---
+    ax2 = fig.add_subplot(132, projection='3d')
+    ax2.set_title("Ground Truth Boxes", fontsize=14)
+    _setup_3d_axes(ax2)
+
+    gt_valid = gt_conf[sample_idx]
+    if gt_valid.ndim > 1:
+        gt_valid = gt_valid.mean(dim=-1)
+    gt_mask = gt_valid > 0.5
+
+    num_gt = gt_mask.sum().item()
+    for i in range(gt_mask.shape[0]):
+        if gt_mask[i].item():
+            corners = gt_corners[sample_idx, i].cpu().numpy()
+            draw_3d_box(ax2, corners, color='green', alpha=0.5)
+    ax2.view_init(elev=20, azim=135)
+    ax2.text2D(0.05, 0.95, f"{num_gt} GT boxes", transform=ax2.transAxes, fontsize=12)
+
+    # --- Predicted Boxes ---
+    ax3 = fig.add_subplot(133, projection='3d')
+    ax3.set_title(f"Predicted Boxes (conf > {conf_threshold})", fontsize=14)
+    _setup_3d_axes(ax3)
+
+    pred_valid = pred_conf[sample_idx]
+    if pred_valid.ndim > 1:
+        pred_valid = pred_valid.mean(dim=-1)
+    pred_mask = pred_valid > conf_threshold
+
+    num_pred = pred_mask.sum().item()
+    for i in range(pred_mask.shape[0]):
+        if pred_mask[i].item():
+            corners = pred_corners[sample_idx, i].detach().cpu().numpy()
+            draw_3d_box(ax3, corners, color='red', alpha=0.5)
+    ax3.view_init(elev=20, azim=135)
+    ax3.text2D(0.05, 0.95, f"{num_pred} Predicted boxes", transform=ax3.transAxes, fontsize=12)
+
+    plt.suptitle("3D Bounding Box Visualization", fontsize=16, y=1.02)
     plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    
+    # add grid
+    for ax in fig.axes:
+        ax.grid(False)
     return fig
 
 
-def draw_3d_bbox(ax, bbox, color='red', alpha=0.7, linewidth=1, label=None):
-    x, y, z, w, h, d, rx, ry, rz = bbox
-    
-    corners = np.array([
-        [-w/2, -h/2, -d/2], [w/2, -h/2, -d/2],
-        [w/2, h/2, -d/2], [-w/2, h/2, -d/2],
-        [-w/2, -h/2, d/2], [w/2, -h/2, d/2],
-        [w/2, h/2, d/2], [-w/2, h/2, d/2]
-    ])
-    
-    rotation_matrix = get_rotation_matrix(rx, ry, rz)
-    rotated_corners = corners @ rotation_matrix.T
-    translated_corners = rotated_corners + np.array([x, y, z])
-    
+def draw_3d_box(ax, corners, color='blue', alpha=0.6):
     edges = [
         [0, 1], [1, 2], [2, 3], [3, 0],
         [4, 5], [5, 6], [6, 7], [7, 4],
         [0, 4], [1, 5], [2, 6], [3, 7]
     ]
-    
-    for i, edge in enumerate(edges):
-        points = translated_corners[edge]
-        ax.plot3D(*points.T, color=color, alpha=alpha, linewidth=linewidth,
-                 label=label if i == 0 and label else None)
+    for edge in edges:
+        p1, p2 = corners[edge]
+        ax.plot3D(*zip(p1, p2), color=color, alpha=alpha, linewidth=2.5)
 
-
-def get_rotation_matrix(rx, ry, rz):
-    Rx = np.array([[1, 0, 0],
-                   [0, np.cos(rx), -np.sin(rx)],
-                   [0, np.sin(rx), np.cos(rx)]])
-    
-    Ry = np.array([[np.cos(ry), 0, np.sin(ry)],
-                   [0, 1, 0],
-                   [-np.sin(ry), 0, np.cos(ry)]])
-    
-    Rz = np.array([[np.cos(rz), -np.sin(rz), 0],
-                   [np.sin(rz), np.cos(rz), 0],
-                   [0, 0, 1]])
-    
-    return Rz @ Ry @ Rx
-
-
-def visualize_confidence_distribution(confidences, save_path=None):
-    plt.figure(figsize=(10, 6))
-    
-    plt.subplot(1, 2, 1)
-    plt.hist(confidences, bins=50, alpha=0.7, color='skyblue', edgecolor='black')
-    plt.xlabel('Confidence Score')
-    plt.ylabel('Frequency')
-    plt.title('Confidence Score Distribution')
-    plt.grid(True, alpha=0.3)
-    
-    plt.subplot(1, 2, 2)
-    sorted_conf = sorted(confidences, reverse=True)
-    plt.plot(range(len(sorted_conf)), sorted_conf, 'b-', linewidth=2)
-    plt.xlabel('Prediction Rank')
-    plt.ylabel('Confidence Score')
-    plt.title('Confidence Scores (Sorted)')
-    plt.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    
-    return plt.gcf()
-
-
-def create_detection_summary_plot(metrics, save_path=None):
-    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 10))
-    
-    performance_metrics = ['Precision', 'Recall', 'F1-Score']
-    performance_values = [metrics['precision'], metrics['recall'], metrics['f1_score']]
-    
-    bars1 = ax1.bar(performance_metrics, performance_values, 
-                   color=['lightcoral', 'lightgreen', 'lightblue'])
-    ax1.set_title('Detection Performance')
-    ax1.set_ylabel('Score')
-    ax1.set_ylim(0, 1)
-    
-    for bar, value in zip(bars1, performance_values):
-        ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01,
-                f'{value:.3f}', ha='center', va='bottom')
-    
-    ap_metrics = ['AP@0.5', 'AP@0.75']
-    ap_values = [metrics['ap_50'], metrics['ap_75']]
-    
-    bars2 = ax2.bar(ap_metrics, ap_values, color=['gold', 'orange'])
-    ax2.set_title('Average Precision')
-    ax2.set_ylabel('AP Score')
-    ax2.set_ylim(0, 1)
-    
-    for bar, value in zip(bars2, ap_values):
-        ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01,
-                f'{value:.3f}', ha='center', va='bottom')
-    
-    ax3.text(0.5, 0.7, f"Mean IoU: {metrics['mean_iou']:.3f}", 
-            transform=ax3.transAxes, ha='center', va='center', 
-            fontsize=16, bbox=dict(boxstyle="round,pad=0.3", facecolor="lightyellow"))
-    
-    ax3.text(0.5, 0.3, f"Total Detections: {metrics['total_predictions']}\nTotal Targets: {metrics['total_targets']}", 
-            transform=ax3.transAxes, ha='center', va='center', 
-            fontsize=14, bbox=dict(boxstyle="round,pad=0.3", facecolor="lightblue"))
-    
-    ax3.set_title('Summary Statistics')
-    ax3.axis('off')
-    
-    if 'iou_distribution' in metrics and len(metrics['iou_distribution']) > 0:
-        ax4.hist(metrics['iou_distribution'], bins=20, alpha=0.7, 
-                color='purple', edgecolor='black')
-        ax4.set_xlabel('IoU Score')
-        ax4.set_ylabel('Frequency')
-        ax4.set_title('IoU Distribution')
-        ax4.grid(True, alpha=0.3)
-    else:
-        ax4.text(0.5, 0.5, 'No IoU data available', 
-                transform=ax4.transAxes, ha='center', va='center', fontsize=14)
-        ax4.set_title('IoU Distribution')
-        ax4.axis('off')
-    
-    plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    
-    return fig
-
-
-def project_3d_to_2d(points_3d, camera_matrix, image_size):
-    if len(points_3d) == 0:
-        return np.array([])
-    
-    points_3d_homogeneous = np.column_stack([points_3d, np.ones(len(points_3d))])
-    points_2d_homogeneous = camera_matrix @ points_3d_homogeneous.T
-    points_2d = points_2d_homogeneous[:2] / points_2d_homogeneous[2]
-    points_2d = points_2d.T
-    
-    valid_mask = ((points_2d[:, 0] >= 0) & (points_2d[:, 0] < image_size[1]) & 
-                  (points_2d[:, 1] >= 0) & (points_2d[:, 1] < image_size[0]))
-    
-    return points_2d[valid_mask]
-
-
-def overlay_2d_boxes_on_image(image, boxes_3d, camera_matrix, save_path=None):
-    if isinstance(image, torch.Tensor):
-        img_np = image.cpu().permute(1, 2, 0).numpy()
-    else:
-        img_np = image.copy()
-    
-    img_np = (img_np - img_np.min()) / (img_np.max() - img_np.min())
-    img_np = (img_np * 255).astype(np.uint8)
-    
-    for box in boxes_3d:
-        corners_3d = get_bbox_corners_for_projection(box)
-        corners_2d = project_3d_to_2d(corners_3d, camera_matrix, img_np.shape[:2])
-        
-        if len(corners_2d) >= 4:
-            hull = cv2.convexHull(corners_2d.astype(np.int32))
-            cv2.drawContours(img_np, [hull], -1, (0, 255, 0), 2)
-    
-    if save_path:
-        cv2.imwrite(save_path, cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR))
-    
-    return img_np
-
-
-def get_bbox_corners_for_projection(bbox):
-    x, y, z, w, h, d, rx, ry, rz = bbox
-    
-    corners = np.array([
-        [-w/2, -h/2, -d/2], [w/2, -h/2, -d/2],
-        [w/2, h/2, -d/2], [-w/2, h/2, -d/2],
-        [-w/2, -h/2, d/2], [w/2, -h/2, d/2],
-        [w/2, h/2, d/2], [-w/2, h/2, d/2]
-    ])
-    
-    rotation_matrix = get_rotation_matrix(rx, ry, rz)
-    rotated_corners = corners @ rotation_matrix.T
-    translated_corners = rotated_corners + np.array([x, y, z])
-    
-    return translated_corners
+def _setup_3d_axes(ax):
+    ax.set_xlabel("X", fontsize=10)
+    ax.set_ylabel("Y", fontsize=10)
+    ax.set_zlabel("Z", fontsize=10)
+    ax.grid(False)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_zticks([])
+    ax.set_box_aspect([1, 1, 1])
