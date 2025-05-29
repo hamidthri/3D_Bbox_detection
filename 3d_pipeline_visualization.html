@@ -1,0 +1,571 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Object Detection Architecture</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .architecture-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+        }
+        
+        .title {
+            text-align: center;
+            font-size: 2.5em;
+            font-weight: 700;
+            color: #2c3e50;
+            margin-bottom: 40px;
+            background: linear-gradient(45deg, #3498db, #9b59b6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .flow-diagram {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 30px;
+        }
+        
+        .input-section {
+            display: flex;
+            justify-content: center;
+            gap: 60px;
+            margin-bottom: 20px;
+        }
+        
+        .input-box {
+            background: linear-gradient(135deg, #74b9ff, #0984e3);
+            color: white;
+            padding: 20px 30px;
+            border-radius: 15px;
+            text-align: center;
+            min-width: 200px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        
+        .input-box h3 {
+            margin: 0 0 10px 0;
+            font-size: 1.4em;
+        }
+        
+        .input-box p {
+            margin: 0;
+            opacity: 0.9;
+            font-size: 0.9em;
+        }
+        
+        .preprocessing-section {
+            display: flex;
+            justify-content: center;
+            gap: 80px;
+            margin: 40px 0;
+        }
+        
+        .processing-section {
+            display: flex;
+            justify-content: center;
+            gap: 80px;
+            margin: 40px 0;
+        }
+        
+        .branch {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .branch-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #2c3e50;
+            background: #ecf0f1;
+            padding: 10px 20px;
+            border-radius: 25px;
+        }
+        
+        .processing-box {
+            background: white;
+            border: 2px solid #e74c3c;
+            border-radius: 12px;
+            padding: 15px 25px;
+            text-align: center;
+            min-width: 180px;
+            box-shadow: 0 4px 15px rgba(231, 76, 60, 0.1);
+            transition: transform 0.3s ease;
+        }
+        
+        .processing-box:hover {
+            transform: translateY(-5px);
+        }
+        
+        .processing-box.rgb {
+            border-color: #e67e22;
+            box-shadow: 0 4px 15px rgba(230, 126, 34, 0.1);
+        }
+        
+        .processing-box.pointcloud {
+            border-color: #27ae60;
+            box-shadow: 0 4px 15px rgba(39, 174, 96, 0.1);
+        }
+        
+        .processing-box h4 {
+            margin: 0 0 8px 0;
+            color: #2c3e50;
+            font-size: 1.1em;
+        }
+        
+        .processing-box p {
+            margin: 0;
+            font-size: 0.85em;
+            color: #7f8c8d;
+        }
+        
+        .fusion-section {
+            background: linear-gradient(135deg, #fd79a8, #fdcb6e);
+            color: white;
+            padding: 25px 40px;
+            border-radius: 20px;
+            text-align: center;
+            margin: 20px 0;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .fusion-section h3 {
+            margin: 0 0 10px 0;
+            font-size: 1.6em;
+        }
+        
+        .fusion-details {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 15px;
+        }
+        
+        .fusion-detail {
+            background: rgba(255,255,255,0.2);
+            padding: 10px 15px;
+            border-radius: 10px;
+            font-size: 0.9em;
+        }
+        
+        .prediction-section {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 30px;
+        }
+        
+        .prediction-box {
+            background: linear-gradient(135deg, #a29bfe, #6c5ce7);
+            color: white;
+            padding: 20px 30px;
+            border-radius: 15px;
+            text-align: center;
+            min-width: 200px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+        
+        .prediction-box h4 {
+            margin: 0 0 10px 0;
+            font-size: 1.3em;
+        }
+        
+        .arrow {
+            width: 0;
+            height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-top: 20px solid #74b9ff;
+            margin: 10px auto;
+        }
+        
+        .arrow-horizontal {
+            width: 0;
+            height: 0;
+            border-top: 15px solid transparent;
+            border-bottom: 15px solid transparent;
+            border-left: 20px solid #74b9ff;
+            margin: auto 20px;
+        }
+        
+        .specs-section {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 40px;
+        }
+        
+        .specs-title {
+            font-size: 1.4em;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .specs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+        
+        .spec-item {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid #3498db;
+        }
+        
+        .spec-item strong {
+            color: #2c3e50;
+        }
+        
+        .dgcnn-note {
+            background: #e8f5e8;
+            border: 2px dashed #27ae60;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: center;
+            font-style: italic;
+            color: #27ae60;
+        }
+        
+        @media (max-width: 768px) {
+            .input-section, .preprocessing-section, .processing-section, .prediction-section {
+                flex-direction: column;
+                align-items: center;
+                gap: 20px;
+            }
+            
+            .fusion-details {
+                flex-direction: column;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="architecture-container">
+        <h1 class="title">3D Object Detection Architecture</h1>
+        
+        <div class="flow-diagram">
+            <!-- Input Section -->
+            <div class="input-section">
+                <div class="input-box">
+                    <h3>RGB Image</h3>
+                    <p>Raw Image Data</p>
+                    <p>Color + Spatial Info</p>
+                </div>
+                <div class="input-box">
+                    <h3>Point Cloud</h3>
+                    <p>Raw 3D Points</p>
+                    <p>3D Geometric Info</p>
+                </div>
+                <div class="input-box">
+                    <h3>3D Bounding Boxes</h3>
+                    <p>Corners (N × 8 × 3)</p>
+                    <p>Ground Truth</p>
+                </div>
+            </div>
+            
+            <div class="arrow"></div>
+            
+            <!-- Preprocessing Section -->
+            <div class="preprocessing-section">
+                <!-- RGB Preprocessing Branch -->
+                <div class="branch">
+                    <div class="branch-title">RGB Preprocessing</div>
+                    
+                    <div class="processing-box rgb">
+                        <h4>Image Loading</h4>
+                        <p>Load rgb.jpg</p>
+                        <p>BGR to RGB</p>
+                    </div>
+                    
+                    <div class="arrow"></div>
+                    
+                    <div class="processing-box rgb">
+                        <h4>Transformations</h4>
+                        <p>Resize to 480×608</p>
+                        <p>Augment (Train): Flip, Rotate, Crop</p>
+                    </div>
+                    
+                    <div class="arrow"></div>
+                    
+                    <div class="processing-box rgb">
+                        <h4>Normalization</h4>
+                        <p>Mean: [0.485, 0.456, 0.406]</p>
+                        <p>Std: [0.229, 0.224, 0.225]</p>
+                    </div>
+                </div>
+                
+                <!-- Point Cloud Preprocessing Branch -->
+                <div class="branch">
+                    <div class="branch-title">Point Cloud Preprocessing</div>
+                    
+                    <div class="processing-box pointcloud">
+                        <h4>Point Cloud Loading</h4>
+                        <p>Load pc.npy</p>
+                        <p>Reshape to (N, 3)</p>
+                    </div>
+                    
+                    <div class="arrow"></div>
+                    
+                    <div class="processing-box pointcloud">
+                        <h4>Filtering</h4>
+                        <p>Remove NaN, z > 0</p>
+                        <p>Valid Points Only</p>
+                    </div>
+                    
+                    <div class="arrow"></div>
+                    
+                    <div class="processing-box pointcloud">
+                        <h4>Sampling/Padding</h4>
+                        <p>Max 8192 Points</p>
+                        <p>Random Sample or Zero-Pad</p>
+                    </div>
+                </div>
+                
+                <!-- Bounding Box Preprocessing Branch -->
+                <div class="branch">
+                    <div class="branch-title">Bounding Box Preprocessing</div>
+                    
+                    <div class="processing-box">
+                        <h4>Load Corners</h4>
+                        <p>Load bbox3d.npy</p>
+                        <p>(N × 8 × 3)</p>
+                    </div>
+                    
+                    <div class="arrow"></div>
+                    
+                    <div class="processing-box">
+                        <h4>Parametric Conversion</h4>
+                        <p>Corners to (center, size, quat)</p>
+                        <p>PCA-Based Fitting</p>
+                    </div>
+                    
+                    <div class="arrow"></div>
+                    
+                    <div class="processing-box">
+                        <h4>Padding/Truncation</h4>
+                        <p>Max 21 Objects</p>
+                        <p>Zero-Pad or Truncate</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="arrow"></div>
+            
+            <!-- Processing Branches -->
+            <div class="processing-section">
+                <!-- RGB Branch -->
+                <div class="branch">
+                    <div class="branch-title">RGB Processing Branch</div>
+                    
+                    <div class="processing-box rgb">
+                        <h4>EfficientNet-B3</h4>
+                        <p>Pre-trained on ImageNet</p>
+                        <p>1536D Features</p>
+                    </div>
+                    
+                    <div class="arrow"></div>
+                    
+                    <div class="processing-box rgb">
+                        <h4>Feature Projection</h4>
+                        <p>1536D → 512D</p>
+                        <p>Linear + ReLU + Dropout</p>
+                    </div>
+                    
+                    <div class="arrow"></div>
+                    
+                    <div class="processing-box rgb">
+                        <h4>RGB Features</h4>
+                        <p>512-dimensional</p>
+                        <p>Semantic Features</p>
+                    </div>
+                </div>
+                
+                <!-- Point Cloud Branch -->
+                <div class="branch">
+                    <div class="branch-title">Point Cloud Processing Branch</div>
+                    
+                    <div class="processing-box pointcloud">
+                        <h4>DGCNN Backbone</h4>
+                        <p>Dynamic Graph CNN</p>
+                        <p>k=20 neighbors</p>
+                    </div>
+                    
+                    <div class="arrow"></div>
+                    
+                    <div class="processing-box pointcloud">
+                        <h4>Edge Convolutions</h4>
+                        <p>3 Layers: [64, 64, 64]</p>
+                        <p>Graph Feature Learning</p>
+                    </div>
+                    
+                    <div class="arrow"></div>
+                    
+                    <div class="processing-box pointcloud">
+                        <h4>Global Pooling</h4>
+                        <p>Max Pool → 1024D</p>
+                        <p>Permutation Invariant</p>
+                    </div>
+                    
+                    <div class="arrow"></div>
+                    
+                    <div class="processing-box pointcloud">
+                        <h4>Feature Projection</h4>
+                        <p>1024D → 512D</p>
+                        <p>Linear + ReLU + Dropout</p>
+                    </div>
+                    
+                    <div class="arrow"></div>
+                    
+                    <div class="processing-box pointcloud">
+                        <h4>Point Features</h4>
+                        <p>512-dimensional</p>
+                        <p>Geometric Features</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="arrow-horizontal"></div>
+            
+            <!-- Fusion Section -->
+            <div class="fusion-section">
+                <h3>Transformer Fusion</h3>
+                <p>Combining RGB and Point Cloud Features</p>
+                <div class="fusion-details">
+                    <div class="fusion-detail">
+                        Transformer Encoder
+                    </div>
+                    <div class="fusion-detail">
+                        4 Layers, 8 Heads
+                    </div>
+                    <div class="fusion-detail">
+                        512D Fused Features
+                    </div>
+                </div>
+            </div>
+            
+            <div class="arrow"></div>
+            
+            <!-- Prediction Section -->
+            <div class="prediction-section">
+                <div class="prediction-box">
+                    <h4>3D Bounding Box</h4>
+                    <p>(x, y, z, w, h, l, q_w, q_x, q_y, q_z)</p>
+                    <p>Center, Size, Quaternion</p>
+                </div>
+                <div class="prediction-box">
+                    <h4>Confidence Score</h4>
+                    <p>Objectness Probability</p>
+                    <p>Sigmoid Output</p>
+                </div>
+            </div>
+            
+            <!-- DGCNN Note -->
+            <div class="dgcnn-note">
+                Note: DGCNN uses dynamic graph updates with k=20 neighbors to capture local geometric structures in point clouds.
+            </div>
+            
+            <!-- Specifications Section -->
+            <div class="specs-section">
+                <div class="specs-title">Model Specifications</div>
+                <div class="specs-grid">
+                    <div class="spec-item">
+                        <strong>Input Modalities:</strong> RGB Image, Point Cloud (N×3, max 8192), 3D Bounding Boxes (N×8×3)
+                    </div>
+                    <div class="spec-item">
+                        <strong>RGB Preprocessing:</strong> Resize to 480×608, Augment (Train), Normalize
+                    </div>
+                    <div class="spec-item">
+                        <strong>Point Cloud Preprocessing:</strong> Filter NaN/z>0, Sample/Pad to 8192 Points
+                    </div>
+                    <div class="spec-item">
+                        <strong>Bounding Box Preprocessing:</strong> Corners to (center, size, quat), Pad to 21 Objects
+                    </div>
+                    <div class="spec-item">
+                        <strong>RGB Backbone:</strong> EfficientNet-B3, 1536D → 512D via Linear Projection
+                    </div>
+                    <div class="spec-item">
+                        <strong>Point Cloud Backbone:</strong> DGCNN, 3 EdgeConv Layers [64, 64, 64], k=20
+                    </div>
+                    <div class="spec-item">
+                        <strong>Fusion Method:</strong> Transformer Encoder (4 layers, 8 heads, 512D output)
+                    </div>
+                    <div class="spec-item">
+                        <strong>Output:</strong> Up to 21 objects, each with (x, y, z, w, h, l, q_w, q_x, q_y, q_z) + Confidence
+                    </div>
+                    <div class="spec-item">
+                        <strong>Training Dataset:</strong> Custom Dataset (data/dl_challenge)
+                    </div>
+                    <div class="spec-item">
+                        <strong>Loss Function:</strong> L1 Loss (Bounding Box) + Binary Cross-Entropy (Confidence)
+                    </div>
+                    <div class="spec-item">
+                        <strong>Hyperparameters:</strong> Batch Size=4, Epochs=250, LR=1e-4, Dropout=0.2
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
