@@ -9,8 +9,6 @@ This project tackles 3D object detection using multimodal RGB-D data consisting 
 
 👉 **Interactive Overview**: [📊 3D Pipeline Visualization (Rendered)](https://hamidthri.github.io/3D_Bbox_detection/3d_pipeline_visualization.html)
 
-📄 **Full Technical Report**: [📘 pipeline_overview.html](https://hamidthri.github.io/3D_Bbox_detection/pipeline_overview.html)
-
 These resources provide visual and written explanations of the architecture, data flow, and design rationale.
 
 
