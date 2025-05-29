@@ -189,11 +189,16 @@ pip install -r requirements.txt
 ```
 
 ### Data Setup
+If the data is still on the google drive you can download it as follow:
 ```bash
 gdown --id 11s-GLb6LZ0SCAVW6aikqImuuQEEbT_Fb -O dataset.tar
 mkdir -p data
 tar -xf dataset.tar -C data/
+```
+If not you can put your data in `data/dl_challenge/` directory.
 
+
+```bash
 ls data/dl_challenge/
 ```
 
@@ -201,6 +206,67 @@ ls data/dl_challenge/
 ```bash
 python main.py
 ```
+
+### Inference
+```bash
+python inference.py
+```
+
+## 📈 Visualizations and Evaluation Metrics
+
+### 🔍 Prediction Visualizations
+
+The model includes 3D visualization tools to qualitatively assess prediction performance. Using the `visualize_3d_predictions` function (called via `run_inference_demo` in `inference.py`), the pipeline generates side-by-side visualizations of:
+
+- **RGB Input** (denormalized for natural color)
+- **Ground Truth Boxes** (green)
+- **Predicted Boxes** (red, confidence > 0.5)
+
+These visualizations are saved under the `epoch_predictions/` folder and can be generated with:
+
+```bash
+python inference.py
+```
+
+Each output image (e.g., `prediction_demo.html`) displays the predicted and actual bounding boxes in 3D space along with the rgb image.
+
+---
+
+### 📊 Evaluation Metrics
+
+Quantitative evaluation is conducted on the test set. The following metrics are reported:
+
+| Metric                  | Value   | Description |
+|-------------------------|---------|-------------|
+| **Mean Translation Error**  | 0.517 m | Average Euclidean distance between predicted and ground truth centers. Reflects localization accuracy. |
+| **Mean Rotation Error**     | 0.503   | Average angular difference in quaternion space (in radians). Indicates orientation precision. |
+| **Mean Size Error**         | 1.020 m | Average absolute error in bounding box dimensions (width, height, depth). |
+| **Mean 3D IoU**             | 0.05   | Average 3D Intersection over Union. Indicates zero overlap between predicted and true boxes. |
+| **Std Translation Error**   | 0.534   | Standard deviation of translation errors. Measures consistency. |
+| **Std Rotation Error**      | 0.518   | Standard deviation of rotation errors. |
+| **Std Size Error**          | 1.518   | Standard deviation in predicted box sizes. |
+| **Std 3D IoU**              | 0.05   | Zero variance, confirming consistently poor IoU across samples. |
+
+---
+
+### 📌 Interpretation & Future Improvements
+
+The evaluation results suggest:
+
+- **Moderate performance** in predicting object centers and rotations.
+- **Significant issues** with size estimation and 3D box alignment (as indicated by IoU).
+- **High variability** in predictions, suggesting inconsistent model generalization.
+
+#### 🔧 Potential Improvements:
+
+- Incorporate **IoU-based loss** to directly optimize for spatial alignment.
+- Generate **synthetic data** or apply **more aggressive augmentations** to combat overfitting.
+- **Fine-tune pre-trained models** (e.g., UniDet3D) to improve generalization on small datasets.
+- **Verify evaluation logic**, particularly the 3D IoU computation and thresholding conditions.
+
+These visualizations and metrics provide an in-depth understanding of the model's strengths and highlight key areas for future development.
+
+
 
 ## Key Challenges and Solutions
 
