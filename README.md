@@ -15,28 +15,28 @@ These resources provide visual and written explanations of the architecture, dat
 
 ### Approach 1: Custom Training from Scratch
 
-The second approach involved developing a custom multimodal architecture from the ground up. While this provided greater control over the model design and training process, it presented significant challenges given the small dataset size (200 samples), making it particularly difficult to achieve robust generalization without overfitting.
+The first approach involved developing a custom multimodal architecture from the ground up. While this provided greater control over the model design and training process, it presented significant challenges given the small dataset size (200 samples), making it particularly difficult to achieve robust generalization without overfitting.
 
 ## Data Preprocessing
 
-The dataset consists of RGB images, point clouds, 3D bounding box corners, and instance segmentation masks, stored in folders under `data/dl_challenge`. To prepare this data for training, I implemented a custom `BBox3DDataset` class that handles loading, augmentation, and transformation into a format suitable for the neural network.
+The dataset consists of RGB images, point clouds, 3D bounding box corners, and instance segmentation masks, stored in folders under `data/dl_challenge`. To prepare this data for training, I implemented a custom datset class that handles loading, augmentation, and transformation into a format suitable for the neural network.
 
 ### Image Preprocessing
 RGB images are processed with the following steps:
 - **Resizing**: Images are resized to a consistent resolution of 480×608 pixels to ensure uniformity across the dataset.
 - **Training Augmentations**: For the training split, I apply the following augmentations to improve model robustness while preserving spatial relationships:
-  - **Random Horizontal Flip**: Applied with a 50% probability to simulate objects viewed from different angles.
-  - **Random Rotation**: Small rotations up to ±10 degrees to mimic slight camera tilts.
-  - **Color Jitter**: Random adjustments to brightness, contrast, and saturation (each with a factor of 0.2) to handle varying lighting conditions.
-  - **Random Resized Crop**: Crops and resizes images with a scale range of 0.8–1.0 and an aspect ratio of 0.9–1.1 to simulate different framings or distances.
-- **Normalization**: Images are normalized using ImageNet mean `[0.485, 0.456, 0.406]` and standard deviation `[0.229, 0.224, 0.225]` to match the pretrained EfficientNet-B3 backbone.
+  - **Random Horizontal Flip**: 
+  - **Random Rotation**: 
+  - **Color Jitter**: 
+  - **Random Resized Crop**: 
+- **Normalization**: Images are normalized using ImageNet mean and std to match the pretrained EfficientNet-B3 backbone.
 - For validation, only resizing and normalization are applied to ensure consistent evaluation.
 
 ### Point Cloud Preprocessing
 Point clouds are provided as 3D arrays and processed as follows:
 - **Reshaping**: The point cloud is reshaped from `(3, H, W)` to `(H*W, 3)` to represent a set of 3D points.
 - **Filtering**: Invalid points (NaN values or negative z-coordinates) are removed to ensure only valid 3D points are used.
-- **Sampling/Padding**: To maintain a consistent input size, point clouds are either randomly downsampled to 8192 points (if larger) or padded with zeros (if smaller).
+- **Sampling/Padding**: To maintain a consistent input size, point clouds are either randomly downsampled to a set value points if it is larger or padded with zeros if it is smaller.
 
 ### Bounding Box Representation Conversion
 The original dataset provides 3D bounding boxes as 8-corner coordinates `(N, 8, 3)`. To simplify neural network predictions and improve training stability, I convert these to a parametric representation consisting of:
@@ -50,10 +50,6 @@ This conversion is implemented in the `BBoxCornerToParametric` class, which uses
 - **Reduced Dimensionality**: Predicting 10 parameters (center, size, quaternion) instead of 24 coordinates (8 corners × 3) simplifies the regression task.
 - **Regression-Friendly**: Parametric representation is more intuitive for L1 loss and avoids the need for post-processing to extract box properties.
 - **Numerical Stability**: The PCA-based approach handles varying box orientations and sizes robustly, with safeguards for edge cases (e.g., degenerate boxes).
-
-**Implementation Details**:
-- The conversion is performed in `convert_corners_to_params_tensor`, which processes batches of corner data and handles invalid cases by returning default values (e.g., zero center, small size, identity quaternion).
-- During training, bounding box parameters are padded or truncated to a maximum of 21 objects per sample to ensure consistent tensor shapes.
 
 ### Mask Preprocessing
 Instance segmentation masks are provided as `(N, H, W)` arrays. Each mask is resized to the target image size (480×608) using nearest-neighbor interpolation to preserve binary-like values. Masks are padded or truncated to match the maximum number of objects (21) and converted to float32 tensors.
@@ -70,7 +66,7 @@ To process the point cloud data effectively, I evaluated several state-of-the-ar
 - **Sparse Convolutional Networks (Minkowski Engine)**: "4D Spatio-Temporal ConvNets: Minkowski Convolutional Neural Networks" - [Original Paper](https://arxiv.org/abs/1904.08755) | [Primary Repository](https://github.com/NVIDIA/MinkowskiEngine)
 - **PointPillars**: "PointPillars: Fast Encoders for Object Detection from Point Clouds" - [Original Paper](https://arxiv.org/abs/1812.05784) | [Primary Repository](https://github.com/nutonomy/second.pytorch)
 
-After thorough evaluation, **DGCNN** was selected as the optimal backbone for point cloud processing. Its dynamic graph construction, which builds k-nearest neighbor graphs (k=20) to capture local geometric relationships, provides robust feature extraction while remaining computationally efficient. This makes it particularly well-suited for our limited dataset, where overfitting is a concern.
+After some evaluation and research, **DGCNN** was selected as the optimal backbone for point cloud processing. Its dynamic graph construction, which builds k-nearest neighbor graphs (k=20) to capture local geometric relationships, provides robust feature extraction while remaining computationally efficient. This makes it particularly well-suited for our limited dataset, where overfitting is a concern.
 
 ## Final Architecture
 
@@ -79,12 +75,7 @@ The implemented solution, embodied in the `BBox3DPredictor` class, follows a mul
 ### RGB Processing
 - **Backbone**: Pre-trained EfficientNet-B3, initialized with ImageNet weights (not frozen, allowing fine-tuning for our task).
 - **Feature Extraction**: Extracts 1000-dimensional features, which are projected to a 512-dimensional representation using a linear layer, ReLU activation, and dropout (0.2) for robustness.
-- **Augmentation**: For training, applies color-space and spatial transformations that preserve 3D spatial integrity:
-  - Random Horizontal Flip (p=0.5)
-  - Random Rotation (±10 degrees)
-  - Color Jitter (brightness, contrast, saturation with factor 0.2)
-  - Random Resized Crop (scale 0.8–1.0, aspect ratio 0.9–1.1)
-  - Normalization using ImageNet statistics (`mean=[0.485, 0.456, 0.406]`, `std=[0.229, 0.224, 0.225]`)
+
 
 ### Point Cloud Processing
 
@@ -92,9 +83,9 @@ The implemented solution, embodied in the `BBox3DPredictor` class, follows a mul
 - **Processing**: Takes point clouds of 8192 points (3D coordinates) and produces 256-dimensional global features through a series of graph convolutions, batch normalization, and max-pooling.
 - **Output**: A compact 512-dimensional feature vector after a final linear layer, batch normalization, and dropout (0.5).
 
-#### DGCNN Architecture Reference
+#### DGCNN Architecture
 
-I implemented **Dynamic Graph CNN (DGCNN)** following the design outlined in the official [DGCNN repository](https://github.com/AnTao97/dgcnn.pytorch). The architecture is summarized below:
+I implemented **Dynamic Graph CNN (DGCNN)** following the design outlined in the [DGCNN repo](https://github.com/AnTao97/dgcnn.pytorch). The architecture is summarized below:
 
 ![DGCNN Architecture](assets/dgcnn_architecture.jpg)
 
@@ -105,47 +96,12 @@ I implemented **Dynamic Graph CNN (DGCNN)** following the design outlined in the
 - **Integration**: Late fusion, where RGB and point cloud features are stacked and processed by the transformer, then averaged to produce a unified 512-dimensional feature vector.
 
 ### Prediction Heads
-- **Bounding Box Head**: Predicts parameters (center, size, quaternion) for up to 21 objects per scene, outputting a tensor of shape `(batch_size, 21, 10)`. The head consists of three linear layers (512→512, 512→256, 256→210) with ReLU activations and dropout (0.2).
-- **Confidence Head**: Predicts per-object detection confidence scores, outputting a tensor of shape `(batch_size, 21)` with sigmoid activation for scores between 0 and 1. The head uses two linear layers (512→256, 256→21) with ReLU and dropout (0.2).
+- **Bounding Box Head**: Predicts parameters (center, size, quaternion) for up to 21 objects per scene(The maximum nymbers in the datset), outputting a tensor of shape `(batch_size, 21, 10)`.
+to predict 10 value for each bounding box 3d.
+- **Confidence Head**: Predicts per-object detection confidence scores, outputting a tensor of shape `(batch_size, 21)` with sigmoid activation for scores between 0 and 1.
 
 This architecture leverages the strengths of EfficientNet-B3 for image processing, DGCNN for point cloud processing, and a transformer for robust feature fusion, ensuring accurate 3D bounding box predictions while remaining computationally efficient.
 
-## Installation and Usage
-
-### Prerequisites
-```bash
-pip install -r requirements.txt
-```
-
-### Data Setup
-```bash
-# Download dataset
-wget --no-check-certificate 'https://drive.google.com/uc?export=download&id=11s-GLb6LZ0SCAVW6aikqImuuQEEbT_Fb' -O dataset.tar
-
-# Extract data
-mkdir -p data
-tar -xf dataset.tar -C data/
-
-# Verify data structure
-ls data/dl_challenge/
-```
-
-### Training
-```bash
-python main.py
-```
-
-## Key Challenges and Solutions
-
-1. **Limited Dataset Size**: With only 200 samples, preventing overfitting was paramount. Solutions included aggressive dropout, careful augmentation, and pre-trained feature extractors.
-
-2. **Multimodal Registration**: Ensuring RGB and point cloud features remain aligned after preprocessing required careful coordinate system management.
-
-3. **Parametric Conversion Stability**: Developing robust algorithms for corner-to-parametric conversion that handle degenerate cases and maintain differentiability.
-
-4. **Memory Constraints**: Efficiently processing high-resolution RGB images alongside dense point clouds within GPU memory limits.
-
-The small dataset size ultimately made training from scratch particularly challenging, reinforcing the value of transfer learning approaches for limited-data scenarios in 3D computer vision tasks.
 
 ## Loss Function Design and Challenges
 
@@ -224,6 +180,44 @@ Initial weights were set to unity, then adjusted during training based on gradie
 4. **Why Confidence Reweighting?**: Initial experiments without reweighting led to models that predicted zero objects for all scenes - the "lazy" solution to minimize false positives.
 
 Carefully designed loss function is essential for achieving stable training on limited dataset while maintaining detection accuracy across varying object scales and orientations.
+
+
+## Installation and Usage
+
+### Prerequisites
+```bash
+pip install -r requirements.txt
+```
+
+### Data Setup
+```bash
+# Download dataset
+wget --no-check-certificate 'https://drive.google.com/uc?export=download&id=11s-GLb6LZ0SCAVW6aikqImuuQEEbT_Fb' -O dataset.tar
+
+# Extract data
+mkdir -p data
+tar -xf dataset.tar -C data/
+
+# Verify data structure
+ls data/dl_challenge/
+```
+
+### Training
+```bash
+python main.py
+```
+
+## Key Challenges and Solutions
+
+1. **Limited Dataset Size**: With only 200 samples, preventing overfitting was paramount. Solutions included aggressive dropout, careful augmentation, and pre-trained feature extractors.
+
+2. **Multimodal Registration**: Ensuring RGB and point cloud features remain aligned after preprocessing required careful coordinate system management.
+
+3. **Parametric Conversion Stability**: Developing robust algorithms for corner-to-parametric conversion that handle degenerate cases and maintain differentiability.
+
+4. **Memory Constraints**: Efficiently processing high-resolution RGB images alongside dense point clouds within GPU memory limits.
+
+The small dataset size ultimately made training from scratch particularly challenging, reinforcing the value of transfer learning approaches for limited-data scenarios in 3D computer vision tasks.
 
 ## Approach 2: Pre-trained Model Fine-tuning
 
