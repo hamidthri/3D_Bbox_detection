@@ -7,7 +7,7 @@ This project tackles 3D object detection using multimodal RGB-D data consisting 
 1. **Training a custom architecture from scratch**, allowing full control over design and optimization.
 2. **Fine-tuning a state-of-the-art pre-trained model** to benefit from transfer learning and better generalization.
 
-# End-to-end Pipeline: 
+# End-to-end Pipeline
 Here is the whole [Pipeline](https://hamidthri.github.io/3D_Bbox_detection/assets/3d_pipeline_visualization.html). This resource provide visual and written explanations of the architecture, data flow, and design rationale.
 
 
@@ -24,10 +24,10 @@ The dataset consists of RGB images, point clouds, 3D bounding box corners, and i
 RGB images are processed with the following steps:
 - **Resizing**: Images are resized to a consistent resolution of 480×608 pixels to ensure uniformity across the dataset.
 - **Training Augmentations**: For the training split, I apply the following augmentations to improve model robustness while preserving spatial relationships:
-  - **Random Horizontal Flip**: 
-  - **Random Rotation**: 
-  - **Color Jitter**: 
-  - **Random Resized Crop**: 
+  - **Random Horizontal Flip**
+  - **Random Rotation**
+  - **Color Jitter**
+  - **Random Resized Crop**
 - **Normalization**: Images are normalized using ImageNet mean and std to match the pretrained EfficientNet-B3 backbone.
 - For validation, only resizing and normalization are applied to ensure consistent evaluation.
 
@@ -192,11 +192,11 @@ python main.py
 python inference.py
 ```
 
-## 📈 Visualizations and Evaluation Metrics
+## Visualizations and Evaluation Metrics
 
 ### 🔍 Prediction Visualizations
 
-The model includes 3D visualization tools to qualitatively assess prediction performance. Using the `visualize_3d_predictions` function (called via `run_inference_demo` in `inference.py`), the pipeline generates side-by-side visualizations of:
+The model includes 3D visualization tools to qualitatively assess prediction performance. Using the `inference.py`), the pipeline generates side-by-side visualizations of:
 
 - **RGB Input** (denormalized for natural color)
 - **Ground Truth Boxes** (green)
