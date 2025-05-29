@@ -103,67 +103,64 @@ to predict 10 value for each bounding box 3d.
 This architecture leverages the strengths of EfficientNet-B3 for image processing, DGCNN for point cloud processing, and a transformer for robust feature fusion, ensuring accurate 3D bounding box predictions while remaining computationally efficient.
 
 
-## Loss Function Design and Challenges
+## Loss Function
 
-### Core Challenge: Set Prediction Problem
+### Problem Statement
 
-3D object detection presents a fundamental challenge: predicting a variable number of objects without knowing their correspondence to ground truth targets. Unlike traditional computer vision tasks with fixed outputs, our model must predict up to 21 objects per scene while handling cases where fewer objects are present.
+3D object detection presents a challenging set prediction problem where the model must predict a variable number of objects without prior knowledge of object count or correspondence between predictions and ground truth targets. This creates inherent ambiguity in the training process that must be carefully addressed.
 
-### Hungarian Matching Strategy
+### Assignment Strategy
 
-To address the correspondence problem, I implemented a Hungarian matching algorithm that optimally assigns predicted bounding boxes to ground truth targets based on a composite cost function:
+The implementation employs a direct assignment approach where predictions are matched to ground truth objects based on spatial proximity and learned feature representations. This strategy simplifies the training pipeline while allowing the model to naturally learn correspondence patterns through the optimization process.
+
+### Loss Components
+
+The multi-component loss function addresses four critical aspects of 3D object detection:
+
+**1. Center Localization (Smooth L1 Loss)**
+```python
+center_loss = F.smooth_l1_loss(pred_centers[valid_mask], gt_centers[valid_mask])
+```
+Provides robust regression for 3D spatial coordinates with reduced sensitivity to outliers compared to L2 loss.
+
+**2. Size Estimation (Log-Scale Smooth L1)**
+```python
+size_loss = F.smooth_l1_loss(torch.log(pred_sizes_pos), torch.log(gt_sizes_pos))
+```
+Operates in logarithmic space to handle the large dynamic range of object scales, ensuring proportional treatment of relative size errors across different object categories.
+
+**3. Orientation Estimation (Angular Distance)**
+```python
+angle_diff = torch.acos(torch.clamp(cos_sim, 0, 1))
+```
+Computes geometrically meaningful angular differences between predicted and ground truth quaternions, providing proper gradients on the rotation manifold.
+
+**4. Object Confidence (Focal Loss)**
+```python
+focal_weight = alpha_t * (1 - p_t) ** 2.0
+```
+Addresses class imbalance inherent in object detection by dynamically weighting hard negative examples and reducing the contribution of well-classified samples.
+
+### Loss Aggregation
 
 ```python
-cost = center_distance + size_distance + rotation_distance
+bbox_loss = center_loss + size_loss + rotation_loss
+total_loss = 5.0 * bbox_loss + conf_loss
 ```
 
-This matching strategy ensures that each ground truth object is assigned to exactly one prediction, eliminating ambiguity in loss computation and preventing the model from converging to degenerate solutions.
+The 5:1 weighting ratio between bounding box regression and confidence classification prioritizes spatial accuracy while maintaining proper confidence calibration.
 
-### Multi-Component Loss Design
+### Design Rationale
 
-The final loss function addresses four critical aspects of 3D object detection:
+- **Direct Assignment**: Reduces computational complexity while leveraging learned spatial priors for correspondence
+- **Log-Scale Size Regression**: Ensures scale-invariant optimization across diverse object categories
+- **Angular Rotation Loss**: Provides geometrically consistent optimization for 3D orientations
+- **Focal Loss**: Mitigates class imbalance and focuses learning on challenging examples
+- **Weighted Aggregation**: Balances localization precision with detection confidence
 
-#### 1. **Center Regression Loss** (L1)
-```python
-center_loss = F.l1_loss(predicted_centers, matched_gt_centers)
-```
+### Robustness Considerations
 
-#### 2. **Size Regression Loss** (L1)  
-```python
-size_loss = F.l1_loss(predicted_sizes, matched_gt_sizes)
-```
-
-#### 3. **Rotation Loss** (Quaternion Cosine Distance)
-```python
-quat_similarity = torch.abs((pred_quat * gt_quat).sum(dim=-1))
-rotation_loss = (1.0 - quat_similarity).mean()
-```
-
-#### 4. **Confidence Loss** (Weighted Binary Cross-Entropy)
-```python
-conf_loss = alpha * positive_loss + (1-alpha) * negative_loss
-```
-
-### Loss Balancing Strategy
-
-Each loss component operates on different scales and units. The weighting strategy balances optimization across all components:
-
-```python
-total_loss = w_center * center_loss + w_size * size_loss + 
-             w_rot * rotation_loss + w_conf * confidence_loss
-```
-
-### Key Design Decisions
-
-1. **Hungarian Matching**: Ensures optimal assignment between predictions and ground truth, preventing training instability from inconsistent correspondences.
-
-2. **L1 Loss for Regression**: Provides robust gradients for spatial localization, less sensitive to outliers compared to L2 loss.
-
-3. **Quaternion Cosine Distance**: Respects quaternion geometry while being computationally efficient compared to geodesic distance.
-
-4. **Confidence Reweighting**: Up-weights positive samples (α=0.75) to prevent model collapse to predicting zero objects.
-
-The carefully designed loss function achieves stable training on limited datasets while maintaining detection accuracy across varying object scales and orientations.
+The loss function incorporates several stability mechanisms including value clamping for numerical stability, quaternion normalization to maintain unit constraints, and valid object masking to prevent gradient computation on empty regions. These design choices ensure stable training convergence across diverse scene configurations and varying object densities.
 
 ## Installation and Usage
 
@@ -220,16 +217,16 @@ Each output image (e.g., `prediction_demo.html`) displays the predicted and actu
 
 Quantitative evaluation is conducted on the test set. The following metrics are reported:
 
-| Metric                  | Value   | Description |
-|-------------------------|---------|-------------|
-| **Mean Translation Error**  | 0.517 m | Average Euclidean distance between predicted and ground truth centers. Reflects localization accuracy. |
-| **Mean Rotation Error**     | 0.503   | Average angular difference in quaternion space (in radians). Indicates orientation precision. |
-| **Mean Size Error**         | 1.020 m | Average absolute error in bounding box dimensions (width, height, depth). |
-| **Mean 3D IoU**             | 0.05   | Average 3D Intersection over Union. Indicates zero overlap between predicted and true boxes. |
-| **Std Translation Error**   | 0.534   | Standard deviation of translation errors. Measures consistency. |
-| **Std Rotation Error**      | 0.518   | Standard deviation of rotation errors. |
-| **Std Size Error**          | 1.518   | Standard deviation in predicted box sizes. |
-| **Std 3D IoU**              | 0.05   | Zero variance, confirming consistently poor IoU across samples. |
+| Metric                  | Value   |
+|-------------------------|---------|
+| **Mean Translation Error**  | 0.1307 m
+| **Mean Rotation Error**     | 0.4898   
+| **Mean Size Error**         | 0.4557 m 
+| **Mean 3D IoU**             | 0.05  
+| **Std Translation Error**   | 0.1527  
+| **Std Rotation Error**      | 0.5266  
+| **Std Size Error**          | 0.0394 
+| **Std 3D IoU**              | 0.0485  
 
 ---
 
