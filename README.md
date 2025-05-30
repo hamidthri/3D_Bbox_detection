@@ -7,7 +7,7 @@ This project tackles 3D object detection using multimodal RGB-D data consisting 
 1. **Training a custom architecture from scratch**, allowing full control over design and optimization.
 2. **Fine-tuning a state-of-the-art pre-trained model** to benefit from transfer learning and better generalization.
 
-# End-to-end Pipeline
+## End-to-end Pipeline
 Here is the whole [Pipeline](https://hamidthri.github.io/3D_Bbox_detection/assets/3d_pipeline_visualization.html). This resource provide visual and written explanations of the architecture, data flow, and design rationale.
 
 
@@ -224,7 +224,7 @@ Each output image (e.g., `prediction_demo.html`) displays the predicted and actu
 
 ### Evaluation Metrics
 
-Quantitative evaluation is conducted on the test set. The following metrics are reported:
+Quantitative evaluation is conducted on the test set. The following metrics are reported after 20 epochs and can be better for longer training:
 
 | Metric                  | Value   |
 |-------------------------|---------|
@@ -286,8 +286,7 @@ I successfully set up the UniDet3D framework, including configuring the preproce
 
 ## Requirements Compliance
 
-✅ **Framework**: PyTorch with supporting libraries.
-
+✅ **Framework**: PyTorch with supporting libraries.\
 ✅ **End-to-end Pipeline**: Complete preprocessing → training → evaluation → visualization  
 ✅ **Documentation**: Architecture diagrams, loss function rationale, code structure  
 ✅ **Custom Metrics**: Translation, rotation, size errors + 3D IoU  
@@ -301,8 +300,8 @@ I successfully set up the UniDet3D framework, including configuring the preproce
 
 ---
 
-# Conclusion
+## Conclusion
 This project demonstrates a comprehensive approach to 3D object detection on RGB-D data, showcasing both the technical challenges and potential solutions in multimodal deep learning. While the custom model achieved moderate performance, the experience highlighted the critical importance of sufficient training data and appropriate transfer learning strategies for complex 3D vision tasks.
 The implementation successfully integrates multiple state-of-the-art components (DGCNN, EfficientNet, Transformer attention) into a cohesive architecture, providing a solid foundation for future improvements. The honest assessment of results and detailed analysis of failure modes provides valuable insights for the computer vision community working on similar challenging problems.
-## Key Takeaway: 
+## Key Takeaway
 Small dataset 3D object detection remains a significant challenge that benefits greatly from pre-trained models and sophisticated data augmentation strategies. The technical framework developed here provides a strong starting point for future research in this domain.
