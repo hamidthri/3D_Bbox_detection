@@ -167,6 +167,7 @@ The loss function incorporates several stability mechanisms including value clam
 
 ```bash
 git clone https://github.com/hamidthri/3D_Bbox_detection.git
+cd 3D_Bbox_detection
 ```
 ### Step 2: Set Up a Virtual Environment
 
