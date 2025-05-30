@@ -1,5 +1,4 @@
 import torch
-import random
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
@@ -12,6 +11,17 @@ class BBoxCornerToParametric:
     def __init__(self, device='cpu'):
         self.device = device
         self.canonical_template = self._get_canonical_template()
+        """
+        This class converts 3D bounding box corners to parametric representation
+        (center, size, rotation quaternion) and vice versa.
+        It supports both PCA-based and min-max fitting methods for box parameters.
+        The canonical template is a unit cube centered at the origin.
+        The corners are expected to be in the shape (8, 3) for a single box or (N, 8, 3) for a batch of boxes.
+        The conversion methods return a dictionary with the following keys:
+        - 'center': The center of the bounding box (3D vector).
+        - 'size': The size of the bounding box (3D vector).
+        - 'rotation_quat': The rotation of the bounding box represented as a quaternion (4D vector).
+        """
 
     def _get_canonical_template(self):
         return np.array([

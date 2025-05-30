@@ -67,5 +67,3 @@ def run_inference_demo(model, test_loader, device, num_samples=5):
                 rgb_img, gt_corners, pred_corners, gt_confs, pred_confs,
                 pointcloud=pc, save_path=f'prediction_demo_{i}.html'
             )
-            
-

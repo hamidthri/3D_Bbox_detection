@@ -5,7 +5,12 @@ from scipy.spatial.distance import cdist
 
 def compute_3d_iou_accurate(corners1, corners2):
     """
-    More accurate 3D IoU computation using bounding box intersection
+        More accurate 3D IoU computation using bounding box intersection
+        Args:
+            corners1: (8, 3) array of corners for first bounding box
+            corners2: (8, 3) array of corners for second bounding box
+        Returns:
+            IoU value between 0 and 1
     """
     def get_bbox_bounds(corners):
         """Get min/max bounds from 8 corners"""
@@ -41,14 +46,28 @@ def compute_3d_iou_accurate(corners1, corners2):
     return intersection / union
 
 def compute_translation_error(pred_params, gt_params):
-    """Compute L2 distance between predicted and ground truth centers"""
+    """
+    Compute L2 distance between predicted and ground truth centers
+    Args:
+        pred_params: Predicted bounding box parameters (9D vector)
+        gt_params: Ground truth bounding box parameters (9D vector)
+    Returns:
+        float: L2 distance between predicted and ground truth centers
+    """
     pred_center = pred_params[:3]  # x, y, z
     gt_center = gt_params[:3]
     return np.linalg.norm(pred_center - gt_center)
 
 
 def compute_translation_error(pred_params, gt_params):
-    """Compute L2 distance between predicted and ground truth centers"""
+    """
+        Compute L2 distance between predicted and ground truth centers
+        Args:
+            pred_params: Predicted bounding box parameters (9D vector)
+            gt_params: Ground truth bounding box parameters (9D vector)
+        Returns:
+            float: L2 distance between predicted and ground truth centers
+    """
     pred_center = pred_params[:3]  # x, y, z
     gt_center = gt_params[:3]
     return np.linalg.norm(pred_center - gt_center)

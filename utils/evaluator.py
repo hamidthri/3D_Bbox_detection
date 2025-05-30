@@ -130,4 +130,3 @@ def create_evaluation_report(evaluator, model_name="3D BBox Predictor"):
     report["interpretation"] = interpretation
 
     return report
-
