@@ -55,6 +55,9 @@ def train_one_epoch(model, dataloader, criterion, optimizer, device, epoch, sche
         pc = batch['pointcloud'].to(device)
         gt_bbox = batch['bbox_params'].to(device)
         gt_conf = (gt_bbox.abs().sum(dim=-1) > 1e-6).float()
+        
+
+
 
         pred_bbox, pred_conf = model(rgb, pc)
         loss_dict = criterion(pred_bbox, pred_conf, gt_bbox, gt_conf)
