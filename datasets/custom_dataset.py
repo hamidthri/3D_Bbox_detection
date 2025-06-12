@@ -13,19 +13,6 @@ from utils.utils import convert_corners_to_params_tensor, BBoxCornerToParametric
 from tqdm import tqdm
 from torchvision import transforms
 
-import os
-import cv2
-import torch
-import numpy as np
-import random
-from PIL import Image
-from tqdm import tqdm
-from torch.utils.data import Dataset
-from scipy.spatial.transform import Rotation as R
-import torch.nn.functional as F
-import torchvision.transforms as T
-from utils.utils import convert_corners_to_params_tensor, BBoxCornerToParametric
-
 
 class BBox3DDataset(Dataset):
     def __init__(self, folder_paths, config, split='train'):
