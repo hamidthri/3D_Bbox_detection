@@ -1,4 +1,4 @@
-# 3D Object Detection on RGB-D Data
+# 3D Object Detection on RGB + Point Cloud Data
 
 ## Project Overview
 
